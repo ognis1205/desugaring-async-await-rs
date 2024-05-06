@@ -1,8 +1,16 @@
-[package]
-name = "desugaring-async-await-rs"
-version = "0.1.0"
+[workspace]
+resolver = "2"
+members = [
+    "crates/*"
+]
+
+[workspace.package]
+authors = ["Shingo OKAWA <shingo.okawa.g.h.c@gmail.com>"]
 edition = "2021"
+rust-version = "1.77"
+keywords = ["io", "async", "non-blocking", "futures"]
+readme = "README.md"
+description = "A single thread async runtime for self-studying purpose"
+license = "Apache-2.0"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
+[workspace.dependencies]

@@ -26,29 +26,48 @@ static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, dr
 
 /// This function will be called when the 'Waker' gets cloned and creates a new `RawWaker` from
 /// the provided data pointer, i.e., an `Id`, and vtable.
+///
+/// SAFETY:
+/// Given that the implementation of this runtime aims to provide a single-threaded version of
+/// an I/O multiplexer, this restriction is lifted
 unsafe fn clone(id: *const ()) -> RawWaker {
     RawWaker::new(id, &VTABLE)
 }
 
 /// This function will be called when `wake` is called on the `Waker` and schedules the `Task`
 /// associated with a give `id`.
+///
+/// SAFETY:
+/// Given that the implementation of this runtime aims to provide a single-threaded version of
+/// an I/O multiplexer, this restriction is lifted
 unsafe fn wake(id: *const ()) {
     wake_by_ref(id);
 }
 
 /// This function will be called when `wake_by_ref` is called on the `Waker` and schedules the `Task`
 /// associated with a give `id`.
+///
+/// SAFETY:
+/// Given that the implementation of this runtime aims to provide a single-threaded version of
+/// an I/O multiplexer, this restriction is lifted
 unsafe fn wake_by_ref(id: *const ()) {
     Scheduler::schedule(TaskId::from_ptr(id))
 }
 
 /// This function gets called when a `Waker` gets dropped.
+///
+/// SAFETY:
+/// Given that the implementation of this runtime aims to provide a single-threaded version of
+/// an I/O multiplexer, this restriction is lifted
 unsafe fn drop(_id: *const ()) {
     // Do nothing.
 }
 
 impl From<TaskId> for Waker {
     fn from(id: TaskId) -> Self {
+        // SAFETY:
+        // Given that the implementation of this runtime aims to provide a single-threaded version of
+        // an I/O multiplexer, this restriction is lifted
         unsafe { Self::from_raw(RawWaker::new(id.to_ptr(), &VTABLE)) }
     }
 }

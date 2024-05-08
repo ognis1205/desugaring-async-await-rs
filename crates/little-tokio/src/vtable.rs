@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This module contains the implementation of a waker.
+//! This module contains the implementation of a vtable for dispatching methods on `Waker`.
 
-use crate::scheduler::Scheduler;
+use crate::core::CORE;
 use crate::task::Id as TaskId;
-use std::task::{RawWaker, RawWakerVTable, Waker};
+use std::task::{RawWaker, RawWakerVTable};
 
 /// The current design of the [`Waker`](https://doc.rust-lang.org/std/task/struct.Waker.html)
 /// is focused on performance and embedded-like scenarios. Hence, This wake-related vtable
 /// functions will be associated with a data which will be required when `Scheduler` schedules
 /// a `Task`.
-static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop);
+pub(crate) static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop);
 
 /// This function will be called when the 'Waker' gets cloned and creates a new `RawWaker` from
 /// the provided data pointer, i.e., an `Id`, and vtable.
@@ -51,7 +51,9 @@ unsafe fn wake(id: *const ()) {
 /// Given that the implementation of this runtime aims to provide a single-threaded version of
 /// an I/O multiplexer, this restriction is lifted
 unsafe fn wake_by_ref(id: *const ()) {
-    Scheduler::schedule(TaskId::from_ptr(id))
+    CORE.with_borrow_mut(|core| {
+        core.as_mut().unwrap().schedule(TaskId::from_ptr(id));
+    })
 }
 
 /// This function gets called when a `Waker` gets dropped.
@@ -61,13 +63,4 @@ unsafe fn wake_by_ref(id: *const ()) {
 /// an I/O multiplexer, this restriction is lifted
 unsafe fn drop(_id: *const ()) {
     // Do nothing.
-}
-
-impl From<TaskId> for Waker {
-    fn from(id: TaskId) -> Self {
-        // SAFETY:
-        // Given that the implementation of this runtime aims to provide a single-threaded version of
-        // an I/O multiplexer, this restriction is lifted
-        unsafe { Self::from_raw(RawWaker::new(id.to_ptr(), &VTABLE)) }
-    }
 }

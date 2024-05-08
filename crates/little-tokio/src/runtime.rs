@@ -12,37 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This module contains the implementation of a single threaded `Future` runtime.
+//! This module provides the APIs of the Little Tokio runtime.
 
-use crate::task::{Id as TaskId, Task};
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::future::Future;
 
-thread_local! {
-    /// Provides the interface to access a `Runtime` thread-local instance. Since the runtime is
-    /// designed solely for single-threaded environments, All access to the runtime needs to occur
-    /// via this thread-local instance.
-    pub(crate) static RUNTIME: RefCell<Option<Runtime>> = RefCell::new(None);
+/// Runs a `Future` to completion on the Little Tokio runtime. This is the runtime’s entry point.
+pub fn block_on(main_task: impl Future<Output = ()> + 'static) {
+    todo!()
 }
 
-/// The Little Tokio runtime which is responsible for I/O multiplexing.
-#[derive(Default)]
-pub struct Runtime {
-    /// Holds the `Task`s to be polled on the Little Tokio runtime.
-    pub(crate) tasks: HashMap<TaskId, Task>,
-    /// Holds the identifiers of `Task`s ready to be polled.
-    pub(crate) scheduled_ids: Vec<TaskId>,
-}
-
-impl Runtime {
-    /// Runs a `Future` to completion on the Little Tokio runtime. This is the runtime’s entry point.
-    pub fn block_on(main_task: impl Future<Output = ()> + 'static) {
-        todo!()
-    }
-
-    /// Spawns a future onto the Little Tokio runtime.
-    pub fn spawn(task: impl Future<Output = ()> + 'static) {
-        todo!()
-    }
+/// Spawns a future onto the Little Tokio runtime.
+pub fn spawn(task: impl Future<Output = ()> + 'static) {
+    todo!()
 }

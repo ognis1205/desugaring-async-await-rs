@@ -15,8 +15,10 @@
 //! This module contains the implementation of a `Task` which represents the unit of
 //! comupation (state machine) of the `Runtime`, i.e., a `Future` implementation.
 
+use crate::vtable::VTABLE;
 use std::future::Future;
 use std::pin::Pin;
+use std::task::{RawWaker, Waker};
 
 /// Represents a `Task` of `Runtime` is defined as a heap-allocated and `Pin`ned instance of the `Future`.
 pub(crate) type Task = Pin<Box<dyn Future<Output = ()>>>;
@@ -41,5 +43,14 @@ impl Id {
     /// a data associated with the wake-related vtable functions, will be accessed via its raw pointer.
     pub(crate) fn from_ptr(value: *const ()) -> Self {
         Self(value as _)
+    }
+}
+
+impl From<Id> for Waker {
+    fn from(id: Id) -> Self {
+        // SAFETY:
+        // Given that the implementation of this runtime aims to provide a single-threaded version of
+        // an I/O multiplexer, this restriction is lifted
+        unsafe { Self::from_raw(RawWaker::new(id.to_ptr(), &VTABLE)) }
     }
 }

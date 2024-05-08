@@ -16,8 +16,7 @@
 //! The implementation is for self-study purpose only, so there might be some
 //! issues. Please use this crate at your own risk.
 
-mod reactor;
+mod core;
 pub mod runtime;
-mod scheduler;
 mod task;
-mod waker;
+mod vtable;

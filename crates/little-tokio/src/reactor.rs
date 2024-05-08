@@ -16,6 +16,7 @@
 
 use crate::runtime::RUNTIME;
 use crate::task::Id as TaskId;
+use std::task::{Context, Poll};
 
 /// Represents a reactor. While the crate provides only single-threaded I/O multiplexing runtime,
 /// this done not necessarily need to be empty struct. However, we implemented it this way because
@@ -26,7 +27,18 @@ pub(crate) struct Reactor;
 impl Reactor {
     /// Polls the `Task` associated with a given `id`.
     pub(crate) fn run(id: TaskId) {
-        todo!()
+        let task = RUNTIME.with_borrow_mut(|runtime| runtime.as_mut().unwrap().tasks.remove(&id));
+        let Some(mut task) = task else {
+            return;
+        };
+        match task.as_mut().poll(&mut Context::from_waker(&id.into())) {
+            Poll::Pending => {
+                RUNTIME.with_borrow_mut(|runtime| {
+                    runtime.as_mut().unwrap().tasks.insert(id, task);
+                });
+            }
+            Poll::Ready(()) => {}
+        }
     }
 
     /// Performs one iteration of the I/O event loop.

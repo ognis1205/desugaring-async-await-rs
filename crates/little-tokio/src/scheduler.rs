@@ -34,8 +34,7 @@ impl Scheduler {
     /// Schedules the `Task` associated with a given `id` to be ready to poll.
     pub(crate) fn schedule(id: TaskId) {
         RUNTIME.with_borrow_mut(|runtime| {
-            let mut runtime = runtime.as_mut().unwrap();
-            runtime.scheduled_ids.push(id);
+            runtime.as_mut().unwrap().scheduled_ids.push(id);
         })
     }
 

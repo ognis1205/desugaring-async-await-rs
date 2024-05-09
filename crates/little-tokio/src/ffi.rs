@@ -12,13 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This crate contains a minimal implementation of a Rust `Future` runtime.
-//! The implementation is for self-study purpose only, so there might be some
-//! issues. Please use this crate at your own risk.
-
-mod core;
-mod ffi;
-mod io;
-pub mod runtime;
-mod task;
-mod vtable;
+//!

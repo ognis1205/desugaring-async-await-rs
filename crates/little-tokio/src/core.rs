@@ -18,7 +18,6 @@ use crate::task::{Id as TaskId, Task};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::task::{Context, Poll};
-//use std::future::Future;
 
 thread_local! {
     /// Provides the interface to access a `Core` thread-local instance. Since the runtime is
@@ -27,8 +26,8 @@ thread_local! {
     pub(crate) static CORE: RefCell<Option<Core>> = RefCell::new(None);
 }
 
-/// Represents the current status of a `Scheduler` instance.
-pub(crate) enum Status {
+/// Represents the current status of a `Core` instance.
+enum Status {
     RunningTasks,
     WaitingForEvents,
     Done,
@@ -69,6 +68,7 @@ impl Core {
     }
 
     /// Returns the current `Status` of a `Core`.
+    #[inline(always)]
     fn status(&self) -> Status {
         if self.tasks.is_empty() {
             return Status::Done;

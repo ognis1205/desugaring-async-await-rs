@@ -35,7 +35,7 @@ enum Status {
 
 /// The Little Tokio runtime which is responsible for I/O multiplexing.
 #[derive(Default)]
-pub struct Core {
+pub(crate) struct Core {
     /// Holds the `Task`s to be polled on the Little Tokio runtime.
     pub(crate) tasks: HashMap<TaskId, Task>,
     /// Holds the identifiers of `Task`s ready to be polled.

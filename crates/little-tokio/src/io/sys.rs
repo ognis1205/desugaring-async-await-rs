@@ -12,12 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This crate contains a minimal implementation of a Rust `Future` runtime.
-//! The implementation is for self-study purpose only, so there might be some
-//! issues. Please use this crate at your own risk.
+//! This module contains the implementation of OS specific bindings.
 
-mod core;
-mod io;
-pub mod runtime;
-mod task;
-mod vtable;
+#[cfg(any(target_os = "macos"))]
+pub(crate) mod unix;
+
+// Wraps system call bindings to transform system call return values into Rust's `Result`.
+#[allow(unused_macros)]
+macro_rules! syscall {
+    ($fn: ident ( $($arg: expr),* $(,)* ) ) => {{
+        let ret = unsafe { libc::$fn($($arg, )*) };
+        if ret < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(ret)
+        }
+    }};
+}

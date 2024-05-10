@@ -16,12 +16,14 @@
 //! in either `Read` or `Write` events.
 
 use std::num::NonZeroU8;
+use std::{fmt, ops};
 
 /// Represents interest in either Read or Write events. This struct is created by using one of
 /// the two constants:
 ///
 /// - Interest::READABLE
 /// - Interest::WRITABLE
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Interest(NonZeroU8);
 
 const READABLE: u8 = 0b0001;
@@ -35,6 +37,12 @@ impl Interest {
     /// Returns a `Interest` set representing writable interests.
     pub const WRITABLE: Interest = Interest(unsafe { NonZeroU8::new_unchecked(WRITABLE) });
 
+    /// Adds together two `Interest`. This does the same thing as the `BitOr` implementation, but is a
+    /// constant function.
+    pub const fn add(self, other: Interest) -> Interest {
+        Interest(unsafe { NonZeroU8::new_unchecked(self.0.get() | other.0.get()) })
+    }
+
     /// Returns true if the value includes readable readiness.
     pub fn is_readable(self) -> bool {
         (self.0.get() & READABLE) != 0
@@ -43,5 +51,43 @@ impl Interest {
     /// Returns true if the value includes writable readiness.
     pub fn is_writable(self) -> bool {
         (self.0.get() & WRITABLE) != 0
+    }
+}
+
+impl ops::BitOr for Interest {
+    type Output = Self;
+
+    #[inline]
+    fn bitor(self, other: Self) -> Self {
+        self.add(other)
+    }
+}
+
+impl ops::BitOrAssign for Interest {
+    #[inline]
+    fn bitor_assign(&mut self, other: Self) {
+        self.0 = (*self | other).0;
+    }
+}
+
+impl fmt::Debug for Interest {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut one = false;
+        if self.is_readable() {
+            if one {
+                write!(fmt, " | ")?
+            }
+            write!(fmt, "READABLE")?;
+            one = true
+        }
+        if self.is_writable() {
+            if one {
+                write!(fmt, " | ")?
+            }
+            write!(fmt, "WRITABLE")?;
+            one = true
+        }
+        debug_assert!(one, "printing empty interests");
+        Ok(())
     }
 }

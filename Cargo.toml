@@ -14,3 +14,4 @@ description = "A single thread async runtime for self-studying purpose"
 license = "Apache-2.0"
 
 [workspace.dependencies]
+libc = "0.2.154"

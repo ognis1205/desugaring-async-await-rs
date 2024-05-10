@@ -1,2 +1,0 @@
-Use kqueue instead of epoll since the MacOSX does not support epoll.
-Use tokio-rs/mio

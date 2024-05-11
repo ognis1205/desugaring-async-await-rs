@@ -32,6 +32,13 @@ pub(crate) type Task = Pin<Box<dyn Future<Output = ()>>>;
 pub(crate) struct Id(usize);
 
 impl Id {
+    /// Returns the copy of the current `Id` and increments the internal `usize` value.
+    pub(crate) fn increment(&mut self) -> Self {
+        let ret = Self(self.0);
+        self.0 += 1;
+        ret
+    }
+
     /// The current design of the [`Waker`](https://doc.rust-lang.org/std/task/struct.Waker.html)
     /// is focused on performance and embedded-like scenarios. Hence, the `Id` value, which is
     /// a data associated with the wake-related vtable functions, will be accessed via its raw pointer.

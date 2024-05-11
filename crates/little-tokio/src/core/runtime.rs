@@ -17,6 +17,7 @@
 use crate::core::task::{Id as TaskId, Task};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt;
 use std::task::{Context, Poll};
 
 thread_local! {
@@ -27,16 +28,32 @@ thread_local! {
 }
 
 /// Represents the current status of a `Runtime` instance.
-#[derive()]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Status {
+    /// Specifies when the runtime is polling scheduled tasks.
     RunningTasks,
+    /// Specifies when the runtime is turning the event loop and waiting for the next events.
     WaitingForEvents,
+    /// Specifies when all operations of the runtime have completed.
     Done,
+}
+
+impl fmt::Debug for Status {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RunningTasks => write!(fmt, "Status::RunningTasks")?,
+            Self::WaitingForEvents => write!(fmt, "Status::WaitingForEvents")?,
+            Self::Done => write!(fmt, "Status::Done")?,
+        }
+        Ok(())
+    }
 }
 
 /// The Little Tokio runtime which is responsible for I/O multiplexing.
 #[derive(Default)]
 pub(crate) struct Runtime {
+    /// Holds the next `Id` value which will be assigned to the next `Task`.
+    pub(crate) next_id: TaskId,
     /// Holds the `Task`s to be polled on the Little Tokio runtime.
     pub(crate) tasks: HashMap<TaskId, Task>,
     /// Holds the identifiers of `Task`s ready to be polled.

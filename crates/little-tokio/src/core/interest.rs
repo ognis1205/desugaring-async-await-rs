@@ -72,22 +72,22 @@ impl ops::BitOrAssign for Interest {
 
 impl fmt::Debug for Interest {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut one = false;
+        let mut is_flagged = false;
         if self.is_readable() {
-            if one {
+            if is_flagged {
                 write!(fmt, " | ")?
             }
             write!(fmt, "READABLE")?;
-            one = true
+            is_flagged = true
         }
         if self.is_writable() {
-            if one {
+            if is_flagged {
                 write!(fmt, " | ")?
             }
             write!(fmt, "WRITABLE")?;
-            one = true
+            is_flagged = true
         }
-        debug_assert!(one, "printing empty interests");
+        debug_assert!(is_flagged, "printing empty interests");
         Ok(())
     }
 }

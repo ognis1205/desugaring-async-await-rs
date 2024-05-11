@@ -17,9 +17,17 @@
 //! issues. Please use this crate at your own risk.
 
 mod core;
-mod interest;
 mod net;
-pub mod runtime;
 mod sys;
-mod task;
-mod vtable;
+
+use std::future::Future;
+
+/// Runs a `Future` to completion on the Little Tokio runtime. This is the runtime’s entry point.
+pub fn block_on(main_task: impl Future<Output = ()> + 'static) {
+    todo!()
+}
+
+/// Spawns a future onto the Little Tokio runtime.
+pub fn spawn(task: impl Future<Output = ()> + 'static) {
+    todo!()
+}

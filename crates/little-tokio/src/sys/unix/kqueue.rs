@@ -13,3 +13,36 @@
 // limitations under the License.
 
 //! This module contains the implementation of UNIX `kqueue` bindings.
+
+/// Represents the Rust wrapper of a libc `kevent`.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+pub(crate) type Event = libc::kevent;
+
+/// Represents the Rust wrapper of a libc `kevent`.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+pub(crate) struct Events(Vec<libc::kevent>);
+
+impl Events {
+    /// Creates `Events` with a given `capacity`.
+    pub fn with_capacity(capacity: usize) -> Events {
+        Events(Vec::with_capacity(capacity))
+    }
+}
+
+impl Deref for Events {
+    type Target = Vec<libc::kevent>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Events {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}

@@ -15,6 +15,7 @@
 //! This module contains the implementation of UNIX `kqueue` bindings.
 
 use std::io;
+use std::mem::{self, MaybeUninit};
 use std::ops::{Deref, DerefMut};
 
 /// Represents the Rust wrapper arround a libc `kevent`.  This wrapper is essentially equivalent to
@@ -78,7 +79,7 @@ pub(crate) struct Events(Vec<libc::kevent>);
 
 impl Events {
     /// Creates `Events` with a given `capacity`.
-    pub fn with_capacity(capacity: usize) -> Events {
+    pub(crate) fn with_capacity(capacity: usize) -> Events {
         Events(Vec::with_capacity(capacity))
     }
 }
@@ -95,4 +96,44 @@ impl DerefMut for Events {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
+}
+
+#[cfg(any(target_os = "macos"))]
+type Count = libc::c_int;
+
+#[cfg(any(target_os = "macos"))]
+type Filter = i16;
+
+#[cfg(any(target_os = "macos"))]
+type Flags = u16;
+
+#[cfg(any(target_os = "macos"))]
+type UData = *mut libc::c_void;
+
+macro_rules! kevent {
+    ($id: expr, $filter: expr, $flags: expr, $data: expr) => {
+        libc::kevent {
+            ident: $id as libc::uintptr_t,
+            filter: $filter as Filter,
+            flags: $flags,
+            udata: $data as UData,
+            // Safety:
+            // The remaining fields are opaque user defined ones so it should be okay to zero-filled.
+            ..unsafe { mem::zeroed() }
+        }
+    };
+}
+
+/// Checks all events for possible errors, it returns the first error found.
+fn check_errors(events: &[libc::kevent], ignored_errors: &[i64]) -> io::Result<()> {
+    for event in events {
+        // We can't use references to packed structures (in checking the ignored errors), so we need
+        // copy the data out before use.
+        let data = event.data as _;
+        // Check for the error flag, the actual error will be in the `data` field.
+        if (event.flags & libc::EV_ERROR != 0) && data != 0 && !ignored_errors.contains(&data) {
+            return Err(io::Error::from_raw_os_error(data as i32));
+        }
+    }
+    Ok(())
 }

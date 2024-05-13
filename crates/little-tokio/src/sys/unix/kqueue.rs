@@ -14,11 +14,59 @@
 
 //! This module contains the implementation of UNIX `kqueue` bindings.
 
-/// Represents the Rust wrapper arround a libc `kevent`.
+use std::io;
+use std::ops::{Deref, DerefMut};
+
+/// Represents the Rust wrapper arround a libc `kevent`.  This wrapper is essentially equivalent to
+/// `libc::kevent`. It implements `Deref` and `DerefMut` to delegate the underlying `Vec` methods.
 ///
 /// # See also:
 /// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
-pub(crate) type Event = libc::kevent;
+pub(crate) struct Event(libc::kevent);
+
+impl Event {
+    /// Returns `true` if the `kevent` representing there is data available to read.
+    pub(crate) fn is_readable(&self) -> bool {
+        self.filter == libc::EVFILT_READ || self.filter == libc::EVFILT_USER
+    }
+
+    /// Returns `true` if the `kevent` representing it is possible to write to the associated file
+    /// descriptor.
+    pub(crate) fn is_writable(&self) -> bool {
+        self.filter == libc::EVFILT_WRITE
+    }
+
+    /// Returns `true` if an error occurs while processing an element of the `changes`.
+    pub(crate) fn is_error(&self) -> bool {
+        (self.flags & libc::EV_ERROR) != 0 || (self.flags & libc::EV_EOF) != 0 && self.fflags != 0
+    }
+
+    /// Returns `true` if the `kevent` is waiting for a reading event and the associated data is closed
+    /// before it reaches to the EOF.
+    pub(crate) fn is_read_closed(&self) -> bool {
+        self.filter == libc::EVFILT_READ && self.flags & libc::EV_EOF != 0
+    }
+
+    /// Returns `true` if the `kevent` is waiting for a writing event and the associated data is closed
+    /// before it reaches to the EOF.
+    pub(crate) fn is_write_closed(&self) -> bool {
+        self.filter == libc::EVFILT_WRITE && self.flags & libc::EV_EOF != 0
+    }
+}
+
+impl Deref for Event {
+    type Target = libc::kevent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Event {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 /// Represents the Rust wrapper around a libc `kevent`. This wrapper is essentially equivalent to
 /// Rust's `Vec` and consists of `kevent` elements. It implements `Deref` and `DerefMut` to delegate
@@ -46,37 +94,5 @@ impl Deref for Events {
 impl DerefMut for Events {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
-    }
-}
-
-/// This module provides `kqueue`-related utility functions.
-pub(crate) mod event {
-    /// Returns `true` if the `kevent` representing there is data available to read.
-    pub(crate) fn is_readable(event: &Event) -> bool {
-        event.filter == libc::EVFILT_READ || event.filter == libc::EVFILT_USER
-    }
-
-    /// Returns `true` if the `kevent` representing it is possible to write to the associated file
-    /// descriptor.
-    pub(crate) fn is_writable(event: &Event) -> bool {
-        event.filter == libc::EVFILT_WRITE
-    }
-
-    /// Returns `true` if an error occurs while processing an element of the `changes`.
-    pub(crate) fn is_error(event: &Event) -> bool {
-        (event.flags & libc::EV_ERROR) != 0
-            || (event.flags & libc::EV_EOF) != 0 && event.fflags != 0
-    }
-
-    /// Returns `true` if the `kevent` is waiting for a reading event and the associated data is closed
-    /// before it reaches to the EOF.
-    pub(crate) fn is_read_closed(event: &Event) -> bool {
-        event.filter == libc::EVFILT_READ && event.flags & libc::EV_EOF != 0
-    }
-
-    /// Returns `true` if the `kevent` is waiting for a writing event and the associated data is closed
-    /// before it reaches to the EOF.
-    pub(crate) fn is_write_closed(event: &Event) -> bool {
-        event.filter == libc::EVFILT_WRITE && event.flags & libc::EV_EOF != 0
     }
 }

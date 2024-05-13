@@ -98,24 +98,42 @@ impl DerefMut for Events {
     }
 }
 
-#[cfg(any(target_os = "macos"))]
+/// Represents `kevent` id.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+type Id = libc::uintptr_t;
+
+/// Represents the number of `kevent`s.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
 type Count = libc::c_int;
 
-#[cfg(any(target_os = "macos"))]
+/// Represents `kevent` filter.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
 type Filter = i16;
 
-#[cfg(any(target_os = "macos"))]
+/// Represents `kevent` flags.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
 type Flags = u16;
 
-#[cfg(any(target_os = "macos"))]
+/// Represents `kevent` data.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
 type UData = *mut libc::c_void;
 
 macro_rules! kevent {
     ($id: expr, $filter: expr, $flags: expr, $data: expr) => {
         libc::kevent {
-            ident: $id as libc::uintptr_t,
+            ident: $id as Id,
             filter: $filter as Filter,
-            flags: $flags,
+            flags: $flags as Flags,
             udata: $data as UData,
             // Safety:
             // The remaining fields are opaque user defined ones so it should be okay to zero-filled.

@@ -20,7 +20,9 @@
 /// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
 pub(crate) type Event = libc::kevent;
 
-/// Represents the Rust wrapper of a libc `kevent`.
+/// Represents the Rust wrapper around a libc `kevent`. This wrapper is essentially equivalent to
+/// Rust's `Vec` and consists of `kevent` elements. It implements `Deref` and `DerefMut` to delegate
+/// the underlying `Vec` methods.
 ///
 /// # See also:
 /// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
@@ -44,5 +46,34 @@ impl Deref for Events {
 impl DerefMut for Events {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+/// This module provides `kqueue`-related utility functions.
+pub(crate) mod event {
+    ///
+    pub(crate) fn is_readable(event: &Event) -> bool {
+        event.filter == libc::EVFILT_READ || event.filter == libc::EVFILT_USER
+    }
+
+    ///
+    pub(crate) fn is_writable(event: &Event) -> bool {
+        event.filter == libc::EVFILT_WRITE
+    }
+
+    ///
+    pub(crate) fn is_error(event: &Event) -> bool {
+        (event.flags & libc::EV_ERROR) != 0
+            || (event.flags & libc::EV_EOF) != 0 && event.fflags != 0
+    }
+
+    ///
+    pub(crate) fn is_read_closed(event: &Event) -> bool {
+        event.filter == libc::EVFILT_READ && event.flags & libc::EV_EOF != 0
+    }
+
+    ///
+    pub(crate) fn is_write_closed(event: &Event) -> bool {
+        event.filter == libc::EVFILT_WRITE && event.flags & libc::EV_EOF != 0
     }
 }

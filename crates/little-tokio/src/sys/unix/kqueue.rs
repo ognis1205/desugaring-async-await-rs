@@ -14,9 +14,10 @@
 
 //! This module contains the implementation of UNIX `kqueue` bindings.
 
-use std::io;
-use std::mem::{self, MaybeUninit};
+use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
+use std::os::fd::RawFd;
+use std::{io, mem, ptr};
 
 /// Represents the Rust wrapper arround a libc `kevent`.  This wrapper is essentially equivalent to
 /// `libc::kevent`. It implements `Deref` and `DerefMut` to delegate the underlying `Vec` methods.
@@ -98,6 +99,9 @@ impl DerefMut for Events {
     }
 }
 
+/// Represents raw OS error codes returned by system calls.
+type RawOsError = i32;
+
 /// Represents `kevent` id.
 ///
 /// # See also:
@@ -128,6 +132,7 @@ type Flags = u16;
 /// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
 type UData = *mut libc::c_void;
 
+// Wraps `libc::kevent` so that the arguments will be coerced as its ABI defined.
 macro_rules! kevent {
     ($id: expr, $filter: expr, $flags: expr, $data: expr) => {
         libc::kevent {
@@ -136,22 +141,51 @@ macro_rules! kevent {
             flags: $flags as Flags,
             udata: $data as UData,
             // Safety:
-            // The remaining fields are opaque user defined ones so it should be okay to zero-filled.
+            // The remaining fields are opaque user defined data. Hence, it should be okay to
+            // fill out with zeros.
             ..unsafe { mem::zeroed() }
         }
     };
 }
 
 /// Checks all events for possible errors, it returns the first error found.
-fn check_errors(events: &[libc::kevent], ignored_errors: &[i64]) -> io::Result<()> {
+fn check_errors(events: &[libc::kevent], ignored_errors: &[RawOsError]) -> io::Result<()> {
     for event in events {
-        // We can't use references to packed structures (in checking the ignored errors), so we need
-        // copy the data out before use.
+        // We can't use references to packed structures (in checking the ignored errors), so we
+        // need copy the data out before use.
         let data = event.data as _;
         // Check for the error flag, the actual error will be in the `data` field.
         if (event.flags & libc::EV_ERROR != 0) && data != 0 && !ignored_errors.contains(&data) {
-            return Err(io::Error::from_raw_os_error(data as i32));
+            return Err(io::Error::from_raw_os_error(data as RawOsError));
         }
     }
     Ok(())
+}
+
+/// Registers `changes` with `kq`ueue.
+fn kevent_register(
+    kq: RawFd,
+    changes: &mut [libc::kevent],
+    ignored_errors: &[RawOsError],
+) -> io::Result<()> {
+    syscall!(kevent(
+        kq,
+        changes.as_ptr(),
+        changes.len() as Count,
+        changes.as_mut_ptr(),
+        changes.len() as Count,
+        ptr::null(),
+    ))
+    .map(|_| ())
+    .or_else(|err| {
+        // Note:
+        // According to the manual page of FreeBSD: "When `kevent()` call fails with `EINTR` error,
+        // all changes in the changelist have been applied", so we can safely ignore it.
+        if err.raw_os_error() == Some(libc::EINTR) {
+            Ok(())
+        } else {
+            Err(err)
+        }
+    })
+    .and_then(|()| check_errors(changes, ignored_errors))
 }

@@ -17,12 +17,12 @@
 
 use crate::core::waker::VTABLE;
 use std::fmt;
-use std::future::Future;
+use std::future;
 use std::pin::Pin;
 use std::task::{RawWaker, Waker};
 
 /// Represents a `Task` of `Runtime` is defined as a heap-allocated and `Pin`ned instance of the `Future`.
-pub(crate) type Task = Pin<Box<dyn Future<Output = ()>>>;
+pub(crate) type Task = Pin<Box<dyn future::Future<Output = ()>>>;
 
 /// Specifies the identifier of a `Task`, which is defined as an `usize` number. In theory, tasks can
 /// have arbitrary data types which will be used for the future usage of a `Future` runtime. However,

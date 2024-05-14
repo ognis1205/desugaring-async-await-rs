@@ -14,18 +14,20 @@
 
 //! This module contains the implementation of OS specific IO multiplexing bindings.
 
-#[cfg(any(target_os = "macos"))]
-pub(crate) mod unix;
+use std::io;
 
-// Wraps system call bindings to transform system call return values into Rust's `Result`.
+// Wraps a given system call so that it returns Rust's `Result`.
 #[allow(unused_macros)]
 macro_rules! syscall {
     ($fn: ident ( $($arg: expr),* $(,)* ) ) => {{
         let ret = unsafe { libc::$fn($($arg, )*) };
         if ret < 0 {
-            Err(std::io::Error::last_os_error())
+            Err(io::Error::last_os_error())
         } else {
             Ok(ret)
         }
     }};
 }
+
+#[cfg(any(target_os = "macos"))]
+pub(crate) mod unix;

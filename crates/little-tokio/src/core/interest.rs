@@ -15,8 +15,7 @@
 //! This module contains the implementation of a `Interest` which represents the interest of
 //! in either `Read` or `Write` events.
 
-use std::num::NonZeroU8;
-use std::{fmt, ops};
+use std::{fmt, num, ops};
 
 /// Represents interest in either Read or Write events. This struct is created by using one of
 /// the two constants:
@@ -24,7 +23,7 @@ use std::{fmt, ops};
 /// - Interest::READABLE
 /// - Interest::WRITABLE
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Interest(NonZeroU8);
+pub(crate) struct Interest(num::NonZeroU8);
 
 const READABLE: u8 = 0b0001;
 
@@ -32,15 +31,15 @@ const WRITABLE: u8 = 0b0010;
 
 impl Interest {
     /// Returns a `Interest` set representing readable interests.
-    pub const READABLE: Interest = Interest(unsafe { NonZeroU8::new_unchecked(READABLE) });
+    pub const READABLE: Interest = Interest(unsafe { num::NonZeroU8::new_unchecked(READABLE) });
 
     /// Returns a `Interest` set representing writable interests.
-    pub const WRITABLE: Interest = Interest(unsafe { NonZeroU8::new_unchecked(WRITABLE) });
+    pub const WRITABLE: Interest = Interest(unsafe { num::NonZeroU8::new_unchecked(WRITABLE) });
 
     /// Adds together two `Interest`. This does the same thing as the `BitOr` implementation, but is a
     /// constant function.
     pub const fn add(self, other: Interest) -> Interest {
-        Interest(unsafe { NonZeroU8::new_unchecked(self.0.get() | other.0.get()) })
+        Interest(unsafe { num::NonZeroU8::new_unchecked(self.0.get() | other.0.get()) })
     }
 
     /// Returns true if the value includes readable readiness.

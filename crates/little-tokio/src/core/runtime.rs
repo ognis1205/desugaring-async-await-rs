@@ -15,16 +15,13 @@
 //! This module contains the implementation of a single threaded `Future` runtime.
 
 use crate::core::task::{Id as TaskId, Task};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::fmt;
-use std::task::{Context, Poll};
+use std::{cell, collections, fmt, task};
 
 thread_local! {
     /// Provides the interface to access a `Runtime` thread-local instance. Since the runtime is
     /// designed solely for single-threaded environments, all access to the runtime needs to occur
     /// via this thread-local instance.
-    pub(crate) static RUNTIME: RefCell<Option<Runtime>> = RefCell::new(None);
+    pub(crate) static RUNTIME: cell::RefCell<Option<Runtime>> = cell::RefCell::new(None);
 }
 
 /// Represents the current status of a `Runtime` instance.
@@ -55,7 +52,7 @@ pub(crate) struct Runtime {
     /// Holds the next `Id` value which will be assigned to the next `Task`.
     pub(crate) next_id: TaskId,
     /// Holds the `Task`s to be polled on the Little Tokio runtime.
-    pub(crate) tasks: HashMap<TaskId, Task>,
+    pub(crate) tasks: collections::HashMap<TaskId, Task>,
     /// Holds the identifiers of `Task`s ready to be polled.
     pub(crate) scheduled_ids: Vec<TaskId>,
 }
@@ -72,11 +69,14 @@ impl Runtime {
         let Some(mut task) = task else {
             return;
         };
-        match task.as_mut().poll(&mut Context::from_waker(&id.into())) {
-            Poll::Pending => {
+        match task
+            .as_mut()
+            .poll(&mut task::Context::from_waker(&id.into()))
+        {
+            task::Poll::Pending => {
                 self.tasks.insert(id, task);
             }
-            Poll::Ready(()) => {}
+            task::Poll::Ready(()) => {}
         }
     }
 

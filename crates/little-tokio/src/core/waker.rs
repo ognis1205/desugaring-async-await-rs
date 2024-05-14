@@ -16,13 +16,14 @@
 
 use crate::core::runtime::RUNTIME;
 use crate::core::task::Id as TaskId;
-use std::task::{RawWaker, RawWakerVTable};
+use std::task;
 
 /// The current design of the [`Waker`](https://doc.rust-lang.org/std/task/struct.Waker.html)
 /// is focused on performance and embedded-like scenarios. Hence, This wake-related vtable
 /// functions will be associated with a data which will be required when `Scheduler` schedules
 /// a `Task`.
-pub(crate) static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop);
+pub(crate) static VTABLE: task::RawWakerVTable =
+    task::RawWakerVTable::new(clone, wake, wake_by_ref, drop);
 
 /// This function will be called when the 'Waker' gets cloned and creates a new `RawWaker` from
 /// the provided data pointer, i.e., an `Id`, and vtable.
@@ -31,8 +32,8 @@ pub(crate) static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake
 ///
 /// Given that the implementation of this runtime aims to provide a single-threaded version of
 /// an I/O multiplexer, this restriction is lifted
-unsafe fn clone(id: *const ()) -> RawWaker {
-    RawWaker::new(id, &VTABLE)
+unsafe fn clone(id: *const ()) -> task::RawWaker {
+    task::RawWaker::new(id, &VTABLE)
 }
 
 /// This function will be called when `wake` is called on the `Waker` and schedules the `Task`

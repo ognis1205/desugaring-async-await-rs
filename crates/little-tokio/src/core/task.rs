@@ -16,13 +16,10 @@
 //! comupation (state machine) of the `Runtime`, i.e., a `Future` implementation.
 
 use crate::core::waker::VTABLE;
-use std::fmt;
-use std::future;
-use std::pin::Pin;
-use std::task::{RawWaker, Waker};
+use std::{fmt, future, pin, task};
 
 /// Represents a `Task` of `Runtime` is defined as a heap-allocated and `Pin`ned instance of the `Future`.
-pub(crate) type Task = Pin<Box<dyn future::Future<Output = ()>>>;
+pub(crate) type Task = pin::Pin<Box<dyn future::Future<Output = ()>>>;
 
 /// Specifies the identifier of a `Task`, which is defined as an `usize` number. In theory, tasks can
 /// have arbitrary data types which will be used for the future usage of a `Future` runtime. However,
@@ -54,12 +51,12 @@ impl Id {
     }
 }
 
-impl From<Id> for Waker {
+impl From<Id> for task::Waker {
     fn from(id: Id) -> Self {
         // SAFETY:
         // Given that the implementation of this runtime aims to provide a single-threaded version of
         // an I/O multiplexer, this restriction is lifted
-        unsafe { Self::from_raw(RawWaker::new(id.to_ptr(), &VTABLE)) }
+        unsafe { Self::from_raw(task::RawWaker::new(id.to_ptr(), &VTABLE)) }
     }
 }
 

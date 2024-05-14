@@ -14,10 +14,7 @@
 
 //! This module contains the implementation of UNIX `kqueue` bindings.
 
-use std::mem::MaybeUninit;
-use std::ops::{Deref, DerefMut};
-use std::os::fd::RawFd;
-use std::{io, mem, ptr};
+use std::{cmp, io, mem, ops, os, ptr, time};
 
 /// Represents the Rust wrapper arround a libc `kevent`.  This wrapper is essentially equivalent to
 /// `libc::kevent`. It implements `Deref` and `DerefMut` to delegate the underlying `Vec` methods.
@@ -56,7 +53,7 @@ impl Event {
     }
 }
 
-impl Deref for Event {
+impl ops::Deref for Event {
     type Target = libc::kevent;
 
     fn deref(&self) -> &Self::Target {
@@ -64,7 +61,7 @@ impl Deref for Event {
     }
 }
 
-impl DerefMut for Event {
+impl ops::DerefMut for Event {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -85,7 +82,7 @@ impl Events {
     }
 }
 
-impl Deref for Events {
+impl ops::Deref for Events {
     type Target = Vec<libc::kevent>;
 
     fn deref(&self) -> &Self::Target {
@@ -93,7 +90,7 @@ impl Deref for Events {
     }
 }
 
-impl DerefMut for Events {
+impl ops::DerefMut for Events {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -132,17 +129,18 @@ type Flags = u16;
 /// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
 type UData = *mut libc::c_void;
 
-// Wraps `libc::kevent` so that the arguments will be coerced as its ABI defined.
-macro_rules! kevent {
-    ($id: expr, $filter: expr, $flags: expr, $data: expr) => {
+// Wraps `libc::kevent` so that the arguments will be coerced as its FFI defined.
+macro_rules! new_kevent {
+    ($id: expr, $filter: expr, $flags: expr, $udata: expr) => {
         libc::kevent {
             ident: $id as Id,
             filter: $filter as Filter,
             flags: $flags as Flags,
-            udata: $data as UData,
+            udata: $udata as UData,
             // Safety:
-            // The remaining fields are opaque user defined data. Hence, it should be okay to
-            // fill out with zeros.
+            // The remaining fields are `fflags` and `data`. These filter-specific fields are utilized by the
+	    // kernel and vary depending on the file descriptor types, in other words, these are irrelevant
+	    // to the user land so it is safe to fill out with zeros.
             ..unsafe { mem::zeroed() }
         }
     };
@@ -164,7 +162,7 @@ fn check_errors(events: &[libc::kevent], ignored_errors: &[RawOsError]) -> io::R
 
 /// Registers `changes` with `kq`ueue.
 fn kevent_register(
-    kq: RawFd,
+    kq: os::fd::RawFd,
     changes: &mut [libc::kevent],
     ignored_errors: &[RawOsError],
 ) -> io::Result<()> {
@@ -188,4 +186,54 @@ fn kevent_register(
         }
     })
     .and_then(|()| check_errors(changes, ignored_errors))
+}
+
+/// The MacOSX `kqueue` based IO Mux/Demux.
+#[derive(Default)]
+pub(crate) struct Selector {
+    /// Holds the `kqueue` file descriptor.
+    pub(crate) kq: os::fd::RawFd,
+}
+
+impl Selector {
+    /// Tries to create the `kqueue` based IO Mux/Demux.
+    pub fn try_new() -> io::Result<Self> {
+        let kq = syscall!(kqueue())?;
+        let selector = Self { kq };
+        syscall!(fcntl(kq, libc::F_SETFD, libc::FD_CLOEXEC))?;
+        Ok(selector)
+    }
+
+    /// Tries to select/mux ready `kevents` into `events` with a maximal interval `timeout` to wait for an event.
+    pub(crate) fn try_select(
+        &self,
+        events: &mut Events,
+        timeout: Option<time::Duration>,
+    ) -> io::Result<()> {
+        let timeout = timeout.map(|to| libc::timespec {
+            tv_sec: cmp::min(to.as_secs(), libc::time_t::MAX as u64) as libc::time_t,
+            // `Duration::subsec_nanos` is guaranteed to be less than one billion (the number of
+            // nanoseconds in a second), making the cast to `i32` safe. The cast itself is needed for
+            // platforms where C's long is only 32 bits.
+            tv_nsec: libc::c_long::from(to.subsec_nanos() as i32),
+        });
+        let timeout = timeout
+            .as_ref()
+            .map(|s| s as *const _)
+            .unwrap_or(ptr::null_mut());
+        events.clear();
+        syscall!(kevent(
+            self.kq,
+            ptr::null(),
+            0,
+            events.as_mut_ptr(),
+            events.capacity() as Count,
+            timeout,
+        ))
+        .map(|nevents| {
+            // Safety:
+            // This is safe because `kevent` ensures that `nevents` are assigned.
+            unsafe { events.set_len(nevents as usize) };
+        })
+    }
 }

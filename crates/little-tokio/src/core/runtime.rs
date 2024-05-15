@@ -15,6 +15,7 @@
 //! This module contains the implementation of a single threaded `Future` runtime.
 
 use crate::core::task::{Id as TaskId, Task};
+use crate::core::token::Token;
 use std::{cell, collections, fmt, task};
 
 thread_local! {
@@ -55,6 +56,8 @@ pub(crate) struct Runtime {
     pub(crate) tasks: collections::HashMap<TaskId, Task>,
     /// Holds the identifiers of `Task`s ready to be polled.
     pub(crate) scheduled_ids: Vec<TaskId>,
+    /// Holds the next `Token` value which will be assigned to the next data source.
+    pub(crate) next_token: Token,
 }
 
 impl Runtime {

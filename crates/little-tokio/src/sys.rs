@@ -14,15 +14,13 @@
 
 //! This module contains the implementation of OS specific IO multiplexing bindings.
 
-use std::io;
-
 // Wraps a given system call so that it returns Rust's `Result`.
 #[allow(unused_macros)]
 macro_rules! syscall {
     ($fn: ident ( $($arg: expr),* $(,)* ) ) => {{
         let ret = unsafe { libc::$fn($($arg, )*) };
         if ret < 0 {
-            Err(io::Error::last_os_error())
+            Err(std::io::Error::last_os_error())
         } else {
             Ok(ret)
         }

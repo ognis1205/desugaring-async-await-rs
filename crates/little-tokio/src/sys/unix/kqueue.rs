@@ -14,7 +14,9 @@
 
 //! This module contains the implementation of UNIX `kqueue` bindings.
 
-use std::{cmp, io, mem, ops, os, ptr, time};
+use crate::core::interest::Interest;
+use crate::core::token::Token;
+use std::{cmp, io, mem, ops, os, ptr, slice, time};
 
 /// Represents the Rust wrapper arround a libc `kevent`.  This wrapper is essentially equivalent to
 /// `libc::kevent`. It implements `Deref` and `DerefMut` to delegate the underlying `Vec` methods.
@@ -141,17 +143,22 @@ macro_rules! new_kevent {
             // The remaining fields are `fflags` and `data`. These filter-specific fields are utilized by the
 	    // kernel and vary depending on the file descriptor types, in other words, these are irrelevant
 	    // to the user land so it is safe to fill out with zeros.
-            ..unsafe { mem::zeroed() }
+            ..unsafe { std::mem::zeroed() }
         }
     };
 }
 
 /// Checks all events for possible errors, it returns the first error found.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
 fn check_errors(events: &[libc::kevent], ignored_errors: &[RawOsError]) -> io::Result<()> {
     for event in events {
+        // Note:
         // We can't use references to packed structures (in checking the ignored errors), so we
         // need copy the data out before use.
         let data = event.data as _;
+        // Note:
         // Check for the error flag, the actual error will be in the `data` field.
         if (event.flags & libc::EV_ERROR != 0) && data != 0 && !ignored_errors.contains(&data) {
             return Err(io::Error::from_raw_os_error(data as RawOsError));
@@ -160,18 +167,21 @@ fn check_errors(events: &[libc::kevent], ignored_errors: &[RawOsError]) -> io::R
     Ok(())
 }
 
-/// Registers `changes` with `kq`ueue.
-fn kevent_register(
+/// Registers `changelist` with `kq`ueue.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+fn register_kevents(
     kq: os::fd::RawFd,
-    changes: &mut [libc::kevent],
+    changelist: &mut [libc::kevent],
     ignored_errors: &[RawOsError],
 ) -> io::Result<()> {
     syscall!(kevent(
         kq,
-        changes.as_ptr(),
-        changes.len() as Count,
-        changes.as_mut_ptr(),
-        changes.len() as Count,
+        changelist.as_ptr(),
+        changelist.len() as Count,
+        changelist.as_mut_ptr(),
+        changelist.len() as Count,
         ptr::null(),
     ))
     .map(|_| ())
@@ -185,7 +195,7 @@ fn kevent_register(
             Err(err)
         }
     })
-    .and_then(|()| check_errors(changes, ignored_errors))
+    .and_then(|()| check_errors(changelist, ignored_errors))
 }
 
 /// The MacOSX `kqueue` based IO Mux/Demux.
@@ -197,21 +207,25 @@ pub(crate) struct Selector {
 
 impl Selector {
     /// Tries to create the `kqueue` based IO Mux/Demux.
-    pub fn try_new() -> io::Result<Self> {
+    pub(crate) fn try_new() -> io::Result<Self> {
         let kq = syscall!(kqueue())?;
         let selector = Self { kq };
         syscall!(fcntl(kq, libc::F_SETFD, libc::FD_CLOEXEC))?;
         Ok(selector)
     }
 
-    /// Tries to select/mux ready `kevents` into `events` with a maximal interval `timeout` to wait for an event.
+    /// Tries to select/mux ready `kevents` into `eventlist` with a maximal interval `timeout` to wait for an event.
+    ///
+    /// # See also:
+    /// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
     pub(crate) fn try_select(
         &self,
-        events: &mut Events,
+        eventlist: &mut Events,
         timeout: Option<time::Duration>,
     ) -> io::Result<()> {
         let timeout = timeout.map(|to| libc::timespec {
             tv_sec: cmp::min(to.as_secs(), libc::time_t::MAX as u64) as libc::time_t,
+            // Note:
             // `Duration::subsec_nanos` is guaranteed to be less than one billion (the number of
             // nanoseconds in a second), making the cast to `i32` safe. The cast itself is needed for
             // platforms where C's long is only 32 bits.
@@ -221,19 +235,49 @@ impl Selector {
             .as_ref()
             .map(|s| s as *const _)
             .unwrap_or(ptr::null_mut());
-        events.clear();
+        eventlist.clear();
         syscall!(kevent(
             self.kq,
             ptr::null(),
             0,
-            events.as_mut_ptr(),
-            events.capacity() as Count,
+            eventlist.as_mut_ptr(),
+            eventlist.capacity() as Count,
             timeout,
         ))
         .map(|nevents| {
             // Safety:
             // This is safe because `kevent` ensures that `nevents` are assigned.
-            unsafe { events.set_len(nevents as usize) };
+            unsafe { eventlist.set_len(nevents as usize) };
         })
+    }
+
+    /// Tries to register the given `fd` into `kqueue` to monitor.
+    ///
+    /// # See also:
+    /// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+    pub(crate) fn try_register(
+        &self,
+        fd: os::fd::RawFd,
+        token: Token,
+        interest: Interest,
+    ) -> io::Result<()> {
+        let flags = libc::EV_CLEAR | libc::EV_RECEIPT | libc::EV_ADD;
+        let mut changelist: [mem::MaybeUninit<libc::kevent>; 2] =
+            [mem::MaybeUninit::uninit(), mem::MaybeUninit::uninit()];
+        let mut nchanges = 0;
+        if interest.is_writable() {
+            let kevent = new_kevent!(fd, libc::EVFILT_WRITE, flags, token.to_ptr());
+            changelist[nchanges] = mem::MaybeUninit::new(kevent);
+            nchanges += 1;
+        }
+        if interest.is_readable() {
+            let kevent = new_kevent!(fd, libc::EVFILT_READ, flags, token.to_ptr());
+            changelist[nchanges] = mem::MaybeUninit::new(kevent);
+            nchanges += 1;
+        }
+        // Safety:
+        // This is safe because we ensure that at least `nchanges` are in the array.
+        let changelist = unsafe { slice::from_raw_parts_mut(changelist[0].as_mut_ptr(), nchanges) };
+        register_kevents(self.kq, changelist, &[libc::EPIPE as RawOsError])
     }
 }

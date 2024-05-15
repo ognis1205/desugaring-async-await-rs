@@ -297,3 +297,12 @@ impl Selector {
         register_kevents(self.kq, &mut changelist, &[libc::ENOENT as RawOsError])
     }
 }
+
+impl Drop for Selector {
+    fn drop(&mut self) {
+        match syscall!(close(self.kq)) {
+            Ok(..) => (),
+            Err(e) => panic!("{}", e),
+        }
+    }
+}

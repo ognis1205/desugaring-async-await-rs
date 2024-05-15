@@ -280,4 +280,20 @@ impl Selector {
         let changelist = unsafe { slice::from_raw_parts_mut(changelist[0].as_mut_ptr(), nchanges) };
         register_kevents(self.kq, changelist, &[libc::EPIPE as RawOsError])
     }
+
+    /// Tries to deregister the given `fd` from `kqueue` to monitor.
+    ///
+    /// # See also:
+    /// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+    pub(crate) fn try_deregister(&self, fd: os::fd::RawFd) -> io::Result<()> {
+        let flags = libc::EV_DELETE | libc::EV_RECEIPT;
+        let mut changelist: [libc::kevent; 2] = [
+            new_kevent!(fd, libc::EVFILT_WRITE, flags, 0),
+            new_kevent!(fd, libc::EVFILT_READ, flags, 0),
+        ];
+        // Note:
+        // the ENOENT error when it comes up. The ENOENT error informs us that the filter wasn't
+        // there in first place, but we don't really care about that since our goal is to remove it.
+        register_kevents(self.kq, &mut changelist, &[libc::ENOENT as RawOsError])
+    }
 }

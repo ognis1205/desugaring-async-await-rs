@@ -15,6 +15,7 @@
 //! This module contains the implementation of a `Task` which represents the unit of
 //! comupation (state machine) of the `Runtime`, i.e., a `Future` implementation.
 
+use crate::core::token::Token;
 use crate::core::waker::VTABLE;
 use std::{fmt, future, pin, task};
 
@@ -48,6 +49,12 @@ impl Id {
     /// a data associated with the wake-related vtable functions, will be accessed via its raw pointer.
     pub(crate) fn from_ptr(value: *const ()) -> Self {
         Self(value as _)
+    }
+}
+
+impl From<Token> for Id {
+    fn from(token: Token) -> Self {
+        Self::from_ptr(token.to_ptr())
     }
 }
 

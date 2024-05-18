@@ -15,6 +15,9 @@
 //! This module contains the implementation of a `Token` which represents the user defined `udata`
 //! of the `kevent` system call.
 
+use crate::core::task::Id as TaskId;
+use std::fmt;
+
 /// Identifies a file descriptor to track which data source generated the event.
 #[derive(Default, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Token(usize);
@@ -39,5 +42,18 @@ impl Token {
     /// the user. We use this field for `Token` to identify the event source.
     pub(crate) fn from_ptr(value: *const ()) -> Self {
         Self(value as _)
+    }
+}
+
+impl From<TaskId> for Token {
+    fn from(id: TaskId) -> Self {
+        Self::from_ptr(id.to_ptr())
+    }
+}
+
+impl fmt::Debug for Token {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "{}", self.0)?;
+        Ok(())
     }
 }

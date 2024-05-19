@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This module contains the implementation of OS specific IO multiplexing bindings.
+//! This module contains the implementation of OS specific IO demultiplexing bindings.
 
 // Wraps a given system call so that it returns Rust's `Result`.
 #[allow(unused_macros)]

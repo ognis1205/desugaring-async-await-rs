@@ -12,6 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This module contains networking primitives for IO multiplexing.
+//! This module contains networking primitives for IO demultiplexing.
 
 pub(crate) mod tcp;

@@ -27,7 +27,7 @@ pub(crate) type Task = pin::Pin<Box<dyn future::Future<Output = ()>>>;
 /// the `Runtime` of this crate assumes that only `Id` values are allowed for the data since this crate
 /// is for self-studying purpose.
 #[derive(Default, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Id(usize);
+pub(crate) struct Id(i64);
 
 impl Id {
     /// Returns the copy of the current `Id` and increments the internal `usize` value.

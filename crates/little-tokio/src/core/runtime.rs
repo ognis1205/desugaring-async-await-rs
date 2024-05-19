@@ -14,10 +14,11 @@
 
 //! This module contains the implementation of a single threaded `Future` runtime.
 
+use crate::core::interest::Interest;
 use crate::core::task::{Id as TaskId, Task};
-//use crate::core::token::Token;
+use crate::core::token::Token;
 use crate::sys::unix::kqueue::Selector;
-use std::{cell, collections, fmt, task};
+use std::{cell, collections, fmt, io, os, task};
 
 thread_local! {
     /// Provides the interface to access a `Runtime` thread-local instance. Since the runtime is
@@ -57,10 +58,11 @@ pub(crate) struct Runtime {
     pub(crate) tasks: collections::HashMap<TaskId, Task>,
     /// Holds the identifiers of `Task`s ready to be polled.
     pub(crate) scheduled_ids: Vec<TaskId>,
-    //    /// Holds the next `Token` value which will be assigned to the next data source.
-    //    pub(crate) next_token: Token,
     /// Holds the `libc::kqueue` based IO demultiplexer.
     pub(crate) selector: Selector,
+    /// Holds the correspondence between notified events' tokens and their corresponding wakers,
+    /// which the runtime utilizes to wake up tasks when their IO operation is ready to read.
+    pub(crate) events: collections::HashMap<Token, task::Waker>,
 }
 
 impl Runtime {
@@ -89,6 +91,34 @@ impl Runtime {
     /// Performs one iteration of the I/O event loop.
     pub(crate) fn turn(&mut self) {
         todo!()
+    }
+
+    /// Tries to register the given `fd` into the `selector` to monitor IO events, which is specified by the
+    /// `interest`.
+    pub(crate) fn try_register<Fd>(&mut self, fd: &Fd, interest: Interest) -> io::Result<()>
+    where
+        Fd: os::fd::AsFd + os::fd::AsRawFd,
+    {
+        self.selector
+            .try_register(fd.as_raw_fd(), fd.as_raw_fd().into(), interest)
+    }
+
+    /// Tries to deregister the given `fd` from the `selector`.
+    pub(crate) fn try_deregister<Fd>(&mut self, fd: &Fd) -> io::Result<()>
+    where
+        Fd: os::fd::AsFd + os::fd::AsRawFd,
+    {
+        self.events.remove(&fd.as_raw_fd().into());
+        self.selector.try_deregister(fd.as_raw_fd())
+    }
+
+    /// Notifies when the given `fd` is ready to use and setup the given `waker` to wake up the corresponding
+    /// upstream task to poll.
+    pub(crate) fn notify<Fd>(&mut self, fd: &Fd, waker: task::Waker)
+    where
+        Fd: os::fd::AsFd + os::fd::AsRawFd,
+    {
+        self.events.insert(fd.as_raw_fd().into(), waker);
     }
 
     /// Returns the current `Status` of a `Runtime`.

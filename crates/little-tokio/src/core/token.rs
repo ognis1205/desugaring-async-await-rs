@@ -16,11 +16,11 @@
 //! of the `kevent` system call.
 
 use crate::core::task::Id as TaskId;
-use std::fmt;
+use std::{fmt, os};
 
 /// Identifies a file descriptor to track which data source generated the event.
 #[derive(Default, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Token(usize);
+pub(crate) struct Token(i64);
 
 impl Token {
     /// Returns the copy of the current `Token` and increments the internal `usize` value.
@@ -48,6 +48,12 @@ impl Token {
 impl From<TaskId> for Token {
     fn from(id: TaskId) -> Self {
         Self::from_ptr(id.to_ptr())
+    }
+}
+
+impl From<os::fd::RawFd> for Token {
+    fn from(fd: os::fd::RawFd) -> Self {
+        Self(fd as i64)
     }
 }
 

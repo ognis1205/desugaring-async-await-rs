@@ -17,6 +17,7 @@
 use crate::core::interest::Interest;
 use crate::core::task::{Id as TaskId, Task};
 use crate::core::token::Token;
+use crate::sys::unix::kqueue::Events;
 use crate::sys::unix::kqueue::Selector;
 use std::{cell, collections, fmt, io, os, task};
 
@@ -62,7 +63,7 @@ pub(crate) struct Runtime {
     pub(crate) selector: Selector,
     /// Holds the correspondence between notified events' tokens and their corresponding wakers,
     /// which the runtime utilizes to wake up tasks when their IO operation is ready to read.
-    pub(crate) events: collections::HashMap<Token, task::Waker>,
+    pub(crate) notified_events: collections::HashMap<Token, task::Waker>,
 }
 
 impl Runtime {
@@ -89,8 +90,16 @@ impl Runtime {
     }
 
     /// Performs one iteration of the I/O event loop.
-    pub(crate) fn turn(&mut self) {
-        todo!()
+    pub(crate) fn try_turn(&mut self) -> io::Result<()> {
+        let mut events = Events::default();
+        self.selector.try_select(&mut events, None)?;
+        for event in events.iter() {
+            let token = Token::from_ptr(event.udata as _);
+            if let Some(waker) = self.notified_events.get(&token) {
+                waker.wake_by_ref();
+            }
+        }
+        Ok(())
     }
 
     /// Tries to register the given `fd` into the `selector` to monitor IO events, which is specified by the
@@ -108,7 +117,7 @@ impl Runtime {
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
-        self.events.remove(&fd.as_raw_fd().into());
+        self.notified_events.remove(&fd.as_raw_fd().into());
         self.selector.try_deregister(fd.as_raw_fd())
     }
 
@@ -118,7 +127,7 @@ impl Runtime {
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
-        self.events.insert(fd.as_raw_fd().into(), waker);
+        self.notified_events.insert(fd.as_raw_fd().into(), waker);
     }
 
     /// Returns the current `Status` of a `Runtime`.

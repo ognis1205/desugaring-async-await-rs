@@ -16,7 +16,57 @@
 
 use crate::core::interest::Interest;
 use crate::core::token::Token;
-use std::{cmp, io, mem, ops, os, ptr, slice, time};
+use std::{cmp, default, io, mem, ops, os, ptr, slice, time};
+
+/// Represents raw OS error codes returned by system calls.
+type RawOsError = i32;
+
+/// Represents `kevent` id.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+type Id = libc::uintptr_t;
+
+/// Represents the number of `kevent`s.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+type Count = libc::c_int;
+
+/// Represents `kevent` filter.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+type Filter = i16;
+
+/// Represents `kevent` flags.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+type Flags = u16;
+
+/// Represents `kevent` data.
+///
+/// # See also:
+/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
+type UData = *mut libc::c_void;
+
+// Wraps `libc::kevent` so that the arguments will be coerced as its FFI defined.
+macro_rules! new_kevent {
+    ($id: expr, $filter: expr, $flags: expr, $udata: expr) => {
+        libc::kevent {
+            ident: $id as Id,
+            filter: $filter as Filter,
+            flags: $flags as Flags,
+            udata: $udata as UData,
+            // Safety:
+            // The remaining fields are `fflags` and `data`. These filter-specific fields are utilized by the
+	    // kernel and vary depending on the file descriptor types, in other words, these are irrelevant
+	    // to the user land so it is safe to fill out with zeros.
+            ..unsafe { std::mem::zeroed() }
+        }
+    };
+}
 
 /// Represents the Rust wrapper arround a libc `kevent`.  This wrapper is essentially equivalent to
 /// `libc::kevent`. It implements `Deref` and `DerefMut` to delegate the underlying `Vec` methods.
@@ -69,6 +119,12 @@ impl ops::DerefMut for Event {
     }
 }
 
+impl default::Default for Event {
+    fn default() -> Self {
+        Self(new_kevent!(0, 0, 0, 0))
+    }
+}
+
 /// Represents the Rust wrapper around a libc `kevent`. This wrapper is essentially equivalent to
 /// Rust's `Vec` and consists of `kevent` elements. It implements `Deref` and `DerefMut` to delegate
 /// the underlying `Vec` methods.
@@ -98,54 +154,10 @@ impl ops::DerefMut for Events {
     }
 }
 
-/// Represents raw OS error codes returned by system calls.
-type RawOsError = i32;
-
-/// Represents `kevent` id.
-///
-/// # See also:
-/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
-type Id = libc::uintptr_t;
-
-/// Represents the number of `kevent`s.
-///
-/// # See also:
-/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
-type Count = libc::c_int;
-
-/// Represents `kevent` filter.
-///
-/// # See also:
-/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
-type Filter = i16;
-
-/// Represents `kevent` flags.
-///
-/// # See also:
-/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
-type Flags = u16;
-
-/// Represents `kevent` data.
-///
-/// # See also:
-/// [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html)
-type UData = *mut libc::c_void;
-
-// Wraps `libc::kevent` so that the arguments will be coerced as its FFI defined.
-macro_rules! new_kevent {
-    ($id: expr, $filter: expr, $flags: expr, $udata: expr) => {
-        libc::kevent {
-            ident: $id as Id,
-            filter: $filter as Filter,
-            flags: $flags as Flags,
-            udata: $udata as UData,
-            // Safety:
-            // The remaining fields are `fflags` and `data`. These filter-specific fields are utilized by the
-	    // kernel and vary depending on the file descriptor types, in other words, these are irrelevant
-	    // to the user land so it is safe to fill out with zeros.
-            ..unsafe { std::mem::zeroed() }
-        }
-    };
+impl default::Default for Events {
+    fn default() -> Self {
+        Self(vec![*Event::default()])
+    }
 }
 
 /// Checks all events for possible errors, it returns the first error found.

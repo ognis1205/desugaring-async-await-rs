@@ -59,5 +59,11 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
 
 /// Spawns a future onto the Little Tokio runtime.
 pub fn spawn(task: impl future::Future<Output = ()> + 'static) {
-    todo!()
+    let task = Box::pin(task);
+    RUNTIME.with_borrow_mut(|runtime| {
+        let runtime = runtime.as_mut().unwrap();
+        let id = runtime.next_id.increment();
+        runtime.tasks.insert(id, task);
+        runtime.schedule(id);
+    });
 }

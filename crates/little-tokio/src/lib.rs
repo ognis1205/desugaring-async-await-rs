@@ -20,11 +20,41 @@ mod core;
 mod net;
 mod sys;
 
-use std::future;
+use crate::core::runtime::Runtime;
+use crate::core::runtime::Status;
+use crate::core::runtime::RUNTIME;
+use std::{future, mem};
 
 /// Runs a `Future` to completion on the Little Tokio runtime. This is the runtime’s entry point.
 pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
-    todo!()
+    // Instanciates one runtime per thread.
+    RUNTIME.with_borrow_mut(|runtime| {
+        if runtime.is_some() {
+            panic!("can not spawn more than 1 runtime on the same thread");
+        }
+        *runtime = Some(Runtime::default());
+    });
+    // Spawns the main task.
+    spawn(main_task);
+    // Performs the task execution if there are tasks that can be processed. Otherwise, turns the event loop.
+    loop {
+        let scheduled_ids = RUNTIME
+            .with_borrow_mut(|runtime| mem::take(&mut runtime.as_mut().unwrap().scheduled_ids));
+        for id in scheduled_ids {
+            RUNTIME.with_borrow_mut(|runtime| runtime.as_mut().unwrap().poll(id));
+        }
+        match RUNTIME.with_borrow(|runtime| runtime.as_ref().unwrap().status()) {
+            Status::RunningTasks => continue,
+            Status::WaitingForEvents => {
+                RUNTIME
+                    .with_borrow_mut(|runtime| runtime.as_mut().unwrap().try_turn())
+                    .expect("");
+            }
+            Status::Done => return,
+        }
+    }
+    // Removes the injected data from the runtime thread.
+    RUNTIME.take();
 }
 
 /// Spawns a future onto the Little Tokio runtime.

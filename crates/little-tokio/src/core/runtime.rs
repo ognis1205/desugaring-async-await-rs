@@ -30,7 +30,7 @@ thread_local! {
 
 /// Represents the current status of a `Runtime` instance.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Status {
+pub(crate) enum Status {
     /// Specifies when the runtime is polling scheduled tasks.
     RunningTasks,
     /// Specifies when the runtime is turning the event loop and waiting for the next events.
@@ -94,8 +94,7 @@ impl Runtime {
         let mut events = Events::default();
         self.selector.try_select(&mut events, None)?;
         for event in events.iter() {
-            let token = Token::from_ptr(event.udata as _);
-            if let Some(waker) = self.notified_events.get(&token) {
+            if let Some(waker) = self.notified_events.get(&Token::from_ptr(event.udata as _)) {
                 waker.wake_by_ref();
             }
         }
@@ -132,7 +131,7 @@ impl Runtime {
 
     /// Returns the current `Status` of a `Runtime`.
     #[inline(always)]
-    fn status(&self) -> Status {
+    pub(crate) fn status(&self) -> Status {
         if self.tasks.is_empty() {
             return Status::Done;
         } else if self.scheduled_ids.is_empty() {

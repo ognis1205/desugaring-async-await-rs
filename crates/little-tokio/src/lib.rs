@@ -17,7 +17,7 @@
 //! issues. Please use this crate at your own risk.
 
 mod core;
-mod net;
+pub mod net;
 mod sys;
 
 use crate::core::runtime::Runtime;

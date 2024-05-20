@@ -14,4 +14,4 @@
 
 //! This module contains networking primitives for IO demultiplexing.
 
-pub(crate) mod tcp;
+pub mod tcp;

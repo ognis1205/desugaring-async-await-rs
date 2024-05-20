@@ -48,7 +48,7 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
             Status::WaitingForEvents => {
                 RUNTIME
                     .with_borrow_mut(|runtime| runtime.as_mut().unwrap().try_turn())
-                    .expect("");
+                    .expect("should turn the event loop properly");
             }
             Status::Done => return,
         }

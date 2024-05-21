@@ -71,7 +71,7 @@ impl<'a> Accept<'a> {
         RUNTIME.with_borrow_mut(|runtime| {
             runtime
                 .as_mut()
-                .unwrap()
+                .expect("should acquire runtime properly")
                 .try_register(&listener.delegatee, Interest::READABLE)
                 .expect("should make the TCP listener non blocking properly");
         });
@@ -105,7 +105,7 @@ impl<'a> future::Future for Accept<'a> {
                 RUNTIME.with_borrow_mut(|runtime| {
                     runtime
                         .as_mut()
-                        .unwrap()
+                        .expect("should acquire runtime properly")
                         .block(&self.delegatee, cx.waker().clone())
                 });
                 task::Poll::Pending

@@ -30,7 +30,7 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
     // Instanciates one runtime per thread.
     RUNTIME.with_borrow_mut(|runtime| {
         if runtime.is_some() {
-            panic!("can not spawn more than 1 runtime on the same thread");
+            panic!("can not spawn more than one runtime on the same thread");
         }
         *runtime = Some(Runtime::default());
     });
@@ -38,16 +38,37 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
     spawn(main_task);
     // Performs the task execution if there are tasks that can be processed. Otherwise, turns the event loop.
     loop {
-        let scheduled_ids = RUNTIME
-            .with_borrow_mut(|runtime| mem::take(&mut runtime.as_mut().unwrap().scheduled_ids));
+        let scheduled_ids = RUNTIME.with_borrow_mut(|runtime| {
+            mem::take(
+                &mut runtime
+                    .as_mut()
+                    .expect("should acquire runtime properly")
+                    .scheduled_ids,
+            )
+        });
         for id in scheduled_ids {
-            RUNTIME.with_borrow_mut(|runtime| runtime.as_mut().unwrap().poll(id));
+            RUNTIME.with_borrow_mut(|runtime| {
+                runtime
+                    .as_mut()
+                    .expect("should acquire runtime properly")
+                    .poll(id)
+            });
         }
-        match RUNTIME.with_borrow(|runtime| runtime.as_ref().unwrap().status()) {
+        match RUNTIME.with_borrow(|runtime| {
+            runtime
+                .as_ref()
+                .expect("should acquire runtime properly")
+                .status()
+        }) {
             Status::RunningTasks => continue,
             Status::WaitingForEvents => {
                 RUNTIME
-                    .with_borrow_mut(|runtime| runtime.as_mut().unwrap().try_turn())
+                    .with_borrow_mut(|runtime| {
+                        runtime
+                            .as_mut()
+                            .expect("should acquire runtime properly")
+                            .try_turn()
+                    })
                     .expect("should turn the event loop properly");
             }
             Status::Done => break,
@@ -61,7 +82,7 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
 pub fn spawn(task: impl future::Future<Output = ()> + 'static) {
     let task = Box::pin(task);
     RUNTIME.with_borrow_mut(|runtime| {
-        let runtime = runtime.as_mut().unwrap();
+        let runtime = runtime.as_mut().expect("should acquire runtime properly");
         let id = runtime.next_id.increment();
         runtime.tasks.insert(id, task);
         runtime.schedule(id);

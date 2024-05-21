@@ -38,14 +38,8 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
     spawn(main_task);
     // Performs the task execution if there are tasks that can be processed. Otherwise, turns the event loop.
     loop {
-        let scheduled_ids = RUNTIME.with_borrow_mut(|runtime| {
-            mem::take(
-                &mut runtime
-                    .as_mut()
-                    .expect("should acquire runtime properly")
-                    .scheduled_ids,
-            )
-        });
+        let scheduled_ids = RUNTIME
+            .with_borrow_mut(|runtime| mem::take(&mut runtime.as_mut().unwrap().scheduled_ids));
         for id in scheduled_ids {
             RUNTIME.with_borrow_mut(|runtime| {
                 runtime

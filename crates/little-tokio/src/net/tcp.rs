@@ -22,13 +22,13 @@ use std::{future, io, net, ops, pin, task};
 /// `TcpListener`. It implements `Deref` and `DerefMut` to delegate the underlying `TcpListener` methods.
 /// Additionally, this struct is responsible for `register` and/or `deregister` (IO demultiplexing) the
 /// network IO events to the Little Tokio runtime, which is the core part of this crate.
-pub(crate) struct Listener {
+pub struct Listener {
     delegatee: net::TcpListener,
 }
 
 impl Listener {
     /// Binds inner `TcpListener` to the given `addr` and sets it non-blocking mode.
-    pub(crate) fn bind(addr: impl net::ToSocketAddrs) -> io::Result<Self> {
+    pub fn bind(addr: impl net::ToSocketAddrs) -> io::Result<Self> {
         let delegatee = net::TcpListener::bind(addr)?;
         delegatee.set_nonblocking(true)?;
         Ok(Self { delegatee })
@@ -36,7 +36,7 @@ impl Listener {
 
     /// Accepts the incoming connection and returns an `Accept` struct, which offers an abstraction over
     /// IO demultiplexing using the Rust's `Future` runtime, i.e., the Little Tokio runtime.
-    pub(crate) fn accept(&mut self) -> impl future::Future<Output = AcceptOutput> + '_ {
+    pub fn accept(&mut self) -> impl future::Future<Output = AcceptOutput> + '_ {
         Accept::new(self)
     }
 }

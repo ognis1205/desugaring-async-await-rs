@@ -61,9 +61,9 @@ pub(crate) struct Runtime {
     pub(crate) scheduled_ids: Vec<TaskId>,
     /// Holds the `libc::kqueue` based IO demultiplexer.
     pub(crate) selector: Selector,
-    /// Holds the correspondence between notified events' tokens and their corresponding wakers,
-    /// which the runtime utilizes to wake up tasks when their IO operation is ready to read.
-    pub(crate) notified_events: collections::HashMap<Token, task::Waker>,
+    /// Holds the correspondence between blocked file descriptors' tokens and their corresponding wakers, which
+    /// the runtime utilizes to wake up tasks.
+    pub(crate) blocked_fds: collections::HashMap<Token, task::Waker>,
 }
 
 impl Runtime {
@@ -94,7 +94,7 @@ impl Runtime {
         let mut events = Events::default();
         self.selector.try_select(&mut events, None)?;
         for event in events.iter() {
-            if let Some(waker) = self.notified_events.get(&Token::from_ptr(event.udata as _)) {
+            if let Some(waker) = self.blocked_fds.get(&Token::from_ptr(event.udata as _)) {
                 waker.wake_by_ref();
             }
         }
@@ -116,17 +116,17 @@ impl Runtime {
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
-        self.notified_events.remove(&fd.as_raw_fd().into());
+        self.blocked_fds.remove(&fd.as_raw_fd().into());
         self.selector.try_deregister(fd.as_raw_fd())
     }
 
-    /// Notifies when the given `fd` is ready to use and setup the given `waker` to wake up the corresponding
-    /// upstream task to poll.
-    pub(crate) fn notify<Fd>(&mut self, fd: &Fd, waker: task::Waker)
+    /// Blocks when the given `fd` is not ready to use yet and setup the given `waker` to wake up the corresponding
+    /// downstream task to poll later.
+    pub(crate) fn block<Fd>(&mut self, fd: &Fd, waker: task::Waker)
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
-        self.notified_events.insert(fd.as_raw_fd().into(), waker);
+        self.blocked_fds.insert(fd.as_raw_fd().into(), waker);
     }
 
     /// Returns the current `Status` of a `Runtime`.

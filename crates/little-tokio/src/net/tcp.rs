@@ -93,13 +93,11 @@ impl ops::DerefMut for Accept<'_> {
     }
 }
 
-///
 pub(crate) type AcceptOutput = io::Result<(Stream, net::SocketAddr)>;
 
 impl<'a> future::Future for Accept<'a> {
     type Output = AcceptOutput;
 
-    ///
     fn poll(self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
         match self.delegatee.accept() {
             Ok((stream, addr)) => task::Poll::Ready(Ok((Stream::new(stream)?, addr))),
@@ -108,7 +106,7 @@ impl<'a> future::Future for Accept<'a> {
                     runtime
                         .as_mut()
                         .unwrap()
-                        .notify(&self.delegatee, cx.waker().clone())
+                        .block(&self.delegatee, cx.waker().clone())
                 });
                 task::Poll::Pending
             }

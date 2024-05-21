@@ -50,7 +50,7 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
                     .with_borrow_mut(|runtime| runtime.as_mut().unwrap().try_turn())
                     .expect("should turn the event loop properly");
             }
-            Status::Done => return,
+            Status::Done => break,
         }
     }
     // Removes the injected data from the runtime thread.

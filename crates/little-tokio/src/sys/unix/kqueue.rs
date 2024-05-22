@@ -211,7 +211,6 @@ fn register_kevents(
 }
 
 /// The MacOSX `kqueue` based IO Mux/Demux.
-#[derive(Default)]
 pub(crate) struct Selector {
     /// Holds the `kqueue` file descriptor.
     pub(crate) kq: os::fd::RawFd,
@@ -307,6 +306,12 @@ impl Selector {
         // the ENOENT error when it comes up. The ENOENT error informs us that the filter wasn't
         // there in first place, but we don't really care about that since our goal is to remove it.
         register_kevents(self.kq, &mut changelist, &[libc::ENOENT as RawOsError])
+    }
+}
+
+impl default::Default for Selector {
+    fn default() -> Self {
+        Self::try_new().expect("should instanciate kqueue properly")
     }
 }
 

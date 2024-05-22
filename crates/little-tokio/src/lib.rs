@@ -103,6 +103,7 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
     }
     // Removes the injected data from the runtime thread.
     SCHEDULE.take();
+    REACTOR.take();
 }
 
 /// Spawns a future onto the Little Tokio runtime.

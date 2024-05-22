@@ -20,40 +20,36 @@ mod core;
 pub mod net;
 mod sys;
 
-use crate::core::runtime::Runtime;
-use crate::core::runtime::Status;
+use crate::core::executer::{Executer, Status};
 use crate::core::runtime::RUNTIME;
-use std::{future, mem};
+use std::{cell, future, mem};
+
+thread_local! {
+    /// Provides the interface to access a `Executer` thread-local instance. Since the runtime is
+    /// designed solely for single-threaded environments, all access to the executer needs to occur
+    /// via this thread-local instance.
+    pub(crate) static EXECUTER: cell::RefCell<Option<Executer>> = cell::RefCell::new(None);
+}
 
 /// Runs a `Future` to completion on the Little Tokio runtime. This is the runtime’s entry point.
 pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
-    // Instanciates one runtime per thread.
-    RUNTIME.with_borrow_mut(|runtime| {
-        if runtime.is_some() {
-            panic!("can not spawn more than one runtime on the same thread");
+    // Instanciates one executer per thread.
+    EXECUTER.with_borrow_mut(|executer| {
+        if executer.is_some() {
+            panic!("can not spawn more than one executer on the same thread");
         }
-        *runtime = Some(Runtime::default());
+        *executer = Some(Executer::default());
     });
     // Spawns the main task.
     spawn(main_task);
     // Performs the task execution if there are tasks that can be processed. Otherwise, turns the event loop.
     loop {
-        let scheduled_ids = RUNTIME
-            .with_borrow_mut(|runtime| mem::take(&mut runtime.as_mut().unwrap().scheduled_ids));
+        let scheduled_ids = EXECUTER
+            .with_borrow_mut(|executer| mem::take(&mut executer.as_mut().unwrap().scheduled_ids));
         for id in scheduled_ids {
-            RUNTIME.with_borrow_mut(|runtime| {
-                runtime
-                    .as_mut()
-                    .expect("should acquire runtime properly")
-                    .poll(id)
-            });
+            EXECUTER.with_borrow_mut(|executer| executer.as_mut().unwrap().poll(id));
         }
-        match RUNTIME.with_borrow(|runtime| {
-            runtime
-                .as_ref()
-                .expect("should acquire runtime properly")
-                .status()
-        }) {
+        match EXECUTER.with_borrow(|executer| executer.as_ref().unwrap().status()) {
             Status::RunningTasks => continue,
             Status::WaitingForEvents => {
                 RUNTIME
@@ -69,16 +65,18 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
         }
     }
     // Removes the injected data from the runtime thread.
-    RUNTIME.take();
+    EXECUTER.take();
 }
 
 /// Spawns a future onto the Little Tokio runtime.
 pub fn spawn(task: impl future::Future<Output = ()> + 'static) {
     let task = Box::pin(task);
-    RUNTIME.with_borrow_mut(|runtime| {
-        let runtime = runtime.as_mut().expect("should acquire runtime properly");
-        let id = runtime.next_id.increment();
-        runtime.tasks.insert(id, task);
-        runtime.schedule(id);
+    EXECUTER.with_borrow_mut(|executer| {
+        let Some(executer) = executer.as_mut() else {
+            panic!("runtime should be initialized before running tasks");
+        };
+        let id = executer.next_id.increment();
+        executer.tasks.insert(id, task);
+        executer.schedule(id);
     });
 }

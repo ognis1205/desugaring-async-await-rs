@@ -15,7 +15,7 @@
 //! This module contains the implementation of a vtable for dispatching methods on `Waker`.
 
 use crate::core::task::Id as TaskId;
-use crate::EXECUTER;
+use crate::SCHEDULE;
 use std::task;
 
 /// The current design of the [`Waker`](https://doc.rust-lang.org/std/task/struct.Waker.html)
@@ -55,11 +55,11 @@ unsafe fn wake(id: *const ()) {
 /// Given that the implementation of this runtime aims to provide a single-threaded version of
 /// an I/O multiplexer, this restriction is lifted
 unsafe fn wake_by_ref(id: *const ()) {
-    EXECUTER.with_borrow_mut(|executer| {
-        let Some(executer) = executer else {
+    SCHEDULE.with_borrow_mut(|schedule| {
+        let Some(schedule) = schedule else {
             panic!("runtime should be initialized before running tasks");
         };
-        executer.scheduled_ids.push(TaskId::from_ptr(id));
+        schedule.scheduled_ids.push(TaskId::from_ptr(id));
     })
 }
 

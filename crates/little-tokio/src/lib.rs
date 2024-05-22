@@ -20,37 +20,69 @@ mod core;
 pub mod net;
 mod sys;
 
-use crate::core::executer::{Executer, Status};
 use crate::core::runtime::RUNTIME;
-use std::{cell, future, mem};
+use crate::core::task::{Id as TaskId, Task};
+use std::{cell, collections, fmt, future, mem, task};
 
 thread_local! {
-    /// Provides the interface to access a `Executer` thread-local instance. Since the runtime is
-    /// designed solely for single-threaded environments, all access to the executer needs to occur
+    /// Provides the interface to access a `Schedule` thread-local instance. Since the runtime is
+    /// designed solely for single-threaded environments, all access to the schedule needs to occur
     /// via this thread-local instance.
-    pub(crate) static EXECUTER: cell::RefCell<Option<Executer>> = cell::RefCell::new(None);
+    pub(crate) static SCHEDULE: cell::RefCell<Option<Schedule>> = cell::RefCell::new(None);
+}
+
+/// Represents the current status of a `Schedule` instance.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Status {
+    /// Specifies when the executer is polling scheduled tasks.
+    RunningTasks,
+    /// Specifies when the executer is turning the event loop and waiting for the next events.
+    WaitingForEvents,
+    /// Specifies when all operations of the runtime have completed.
+    Done,
+}
+
+impl fmt::Debug for Status {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RunningTasks => write!(fmt, "Status::RunningTasks")?,
+            Self::WaitingForEvents => write!(fmt, "Status::WaitingForEvents")?,
+            Self::Done => write!(fmt, "Status::Done")?,
+        }
+        Ok(())
+    }
+}
+
+/// The Little Tokio schedule which is responsible for managing polling tasks.
+#[derive(Default)]
+pub(crate) struct Schedule {
+    /// Holds the next `Id` value which will be assigned to the next `Task`.
+    pub(crate) next_id: TaskId,
+    /// Holds the `Task`s to be polled on the Little Tokio runtime.
+    pub(crate) pending_tasks: collections::HashMap<TaskId, Task>,
+    /// Holds the identifiers of `Task`s ready to be polled.
+    pub(crate) scheduled_ids: Vec<TaskId>,
 }
 
 /// Runs a `Future` to completion on the Little Tokio runtime. This is the runtime’s entry point.
 pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
-    // Instanciates one executer per thread.
-    EXECUTER.with_borrow_mut(|executer| {
-        if executer.is_some() {
-            panic!("can not spawn more than one executer on the same thread");
+    // Instanciates one schedule per thread.
+    SCHEDULE.with_borrow_mut(|schedule| {
+        if schedule.is_some() {
+            panic!("can not spawn more than one schedule on the same thread");
         }
-        *executer = Some(Executer::default());
+        *schedule = Some(Schedule::default());
     });
     // Spawns the main task.
     spawn(main_task);
     // Performs the task execution if there are tasks that can be processed. Otherwise, turns the event loop.
     loop {
-        let scheduled_ids = EXECUTER
-            .with_borrow_mut(|executer| mem::take(&mut executer.as_mut().unwrap().scheduled_ids));
+        let scheduled_ids = SCHEDULE
+            .with_borrow_mut(|schedule| mem::take(&mut schedule.as_mut().unwrap().scheduled_ids));
         for id in scheduled_ids {
-            EXECUTER.with_borrow_mut(|executer| executer.as_mut().unwrap().poll(id));
+            poll(id);
         }
-        let status = EXECUTER.with_borrow(|executer| executer.as_ref().unwrap().status());
-        match status {
+        match status() {
             Status::RunningTasks => continue,
             Status::WaitingForEvents => {
                 RUNTIME
@@ -66,18 +98,52 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
         }
     }
     // Removes the injected data from the runtime thread.
-    EXECUTER.take();
+    SCHEDULE.take();
 }
 
 /// Spawns a future onto the Little Tokio runtime.
 pub fn spawn(task: impl future::Future<Output = ()> + 'static) {
     let task = Box::pin(task);
-    EXECUTER.with_borrow_mut(|executer| {
-        let Some(executer) = executer else {
+    SCHEDULE.with_borrow_mut(|schedule| {
+        let Some(schedule) = schedule else {
             panic!("runtime should be initialized before running tasks");
         };
-        let id = executer.next_id.increment();
-        executer.pending_tasks.insert(id, task);
-        executer.scheduled_ids.push(id);
+        let id = schedule.next_id.increment();
+        schedule.pending_tasks.insert(id, task);
+        schedule.scheduled_ids.push(id);
     });
+}
+
+/// Polls the `Task` associated with a given `id`.
+fn poll(id: TaskId) {
+    let task =
+        SCHEDULE.with_borrow_mut(|schedule| schedule.as_mut().unwrap().pending_tasks.remove(&id));
+    let Some(mut task) = task else {
+        return;
+    };
+    match task
+        .as_mut()
+        .poll(&mut task::Context::from_waker(&id.into()))
+    {
+        task::Poll::Pending => {
+            SCHEDULE.with_borrow_mut(|schedule| {
+                schedule.as_mut().unwrap().pending_tasks.insert(id, task);
+            });
+        }
+        task::Poll::Ready(()) => {}
+    }
+}
+
+/// Returns the current `Status` of the Little Tokio runtime.
+fn status() -> Status {
+    SCHEDULE.with_borrow(|schedule| {
+        let schedule = schedule.as_ref().unwrap();
+        if schedule.pending_tasks.is_empty() {
+            return Status::Done;
+        } else if schedule.scheduled_ids.is_empty() {
+            return Status::WaitingForEvents;
+        } else {
+            return Status::RunningTasks;
+        }
+    })
 }

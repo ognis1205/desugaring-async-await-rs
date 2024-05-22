@@ -15,7 +15,7 @@
 //! This module contains the implementation of a single threaded `Future` runtime.
 
 pub(crate) mod interest;
-pub(crate) mod runtime;
+pub(crate) mod reactor;
 pub(crate) mod task;
 pub(crate) mod token;
 pub(crate) mod waker;

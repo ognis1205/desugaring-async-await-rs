@@ -20,7 +20,7 @@ mod core;
 pub mod net;
 mod sys;
 
-use crate::core::runtime::RUNTIME;
+use crate::core::reactor::Reactor;
 use crate::core::task::{Id as TaskId, Task};
 use std::{cell, collections, fmt, future, mem, task};
 
@@ -29,6 +29,10 @@ thread_local! {
     /// designed solely for single-threaded environments, all access to the schedule needs to occur
     /// via this thread-local instance.
     pub(crate) static SCHEDULE: cell::RefCell<Option<Schedule>> = cell::RefCell::new(None);
+    /// Provides the interface to access a `Reactor` thread-local instance. Since the runtime is
+    /// designed solely for single-threaded environments, all access to the runtime needs to occur
+    /// via this thread-local instance.
+    pub(crate) static REACTOR: cell::RefCell<Option<Reactor>> = cell::RefCell::new(None);
 }
 
 /// Represents the current status of a `Schedule` instance.
@@ -73,6 +77,13 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
         }
         *schedule = Some(Schedule::default());
     });
+    // Instanciates one reactor per thread.
+    REACTOR.with_borrow_mut(|reactor| {
+        if reactor.is_some() {
+            panic!("can not spawn more than one reactor on the same thread");
+        }
+        *reactor = Some(Reactor::default());
+    });
     // Spawns the main task.
     spawn(main_task);
     // Performs the task execution if there are tasks that can be processed. Otherwise, turns the event loop.
@@ -85,14 +96,7 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
         match status() {
             Status::RunningTasks => continue,
             Status::WaitingForEvents => {
-                RUNTIME
-                    .with_borrow_mut(|runtime| {
-                        runtime
-                            .as_mut()
-                            .expect("should acquire runtime properly")
-                            .try_turn()
-                    })
-                    .expect("should turn the event loop properly");
+                REACTOR.with_borrow_mut(|reactor| reactor.as_mut().unwrap().turn())
             }
             Status::Done => break,
         }

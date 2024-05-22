@@ -15,7 +15,7 @@
 //! This module contains the implementation of TCP related network demultiplexing utilities.
 
 use crate::core::interest::Interest;
-use crate::core::runtime::RUNTIME;
+use crate::REACTOR;
 use std::{future, io, net, ops, pin, task};
 
 /// Represents the Little Tokio wrapper arround a `TcpListener`. This wrapper is essentially equivalent to
@@ -68,12 +68,11 @@ impl<'a> Accept<'a> {
             .delegatee
             .set_nonblocking(true)
             .expect("should make the TCP listener non blocking properly");
-        RUNTIME.with_borrow_mut(|runtime| {
-            runtime
+        REACTOR.with_borrow_mut(|reactor| {
+            reactor
                 .as_mut()
-                .expect("should acquire runtime properly")
-                .try_register(&listener.delegatee, Interest::READABLE)
-                .expect("should make the TCP listener non blocking properly");
+                .unwrap()
+                .register(&listener.delegatee, Interest::READABLE)
         });
         Self(listener)
     }
@@ -102,10 +101,10 @@ impl<'a> future::Future for Accept<'a> {
         match self.delegatee.accept() {
             Ok((stream, addr)) => task::Poll::Ready(Ok((Stream::new(stream)?, addr))),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                RUNTIME.with_borrow_mut(|runtime| {
-                    runtime
+                REACTOR.with_borrow_mut(|reactor| {
+                    reactor
                         .as_mut()
-                        .expect("should acquire runtime properly")
+                        .unwrap()
                         .block(&self.delegatee, cx.waker().clone())
                 });
                 task::Poll::Pending

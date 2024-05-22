@@ -49,7 +49,8 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
         for id in scheduled_ids {
             EXECUTER.with_borrow_mut(|executer| executer.as_mut().unwrap().poll(id));
         }
-        match EXECUTER.with_borrow(|executer| executer.as_ref().unwrap().status()) {
+        let status = EXECUTER.with_borrow(|executer| executer.as_ref().unwrap().status());
+        match status {
             Status::RunningTasks => continue,
             Status::WaitingForEvents => {
                 RUNTIME
@@ -72,11 +73,11 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
 pub fn spawn(task: impl future::Future<Output = ()> + 'static) {
     let task = Box::pin(task);
     EXECUTER.with_borrow_mut(|executer| {
-        let Some(executer) = executer.as_mut() else {
+        let Some(executer) = executer else {
             panic!("runtime should be initialized before running tasks");
         };
         let id = executer.next_id.increment();
-        executer.tasks.insert(id, task);
-        executer.schedule(id);
+        executer.pending_tasks.insert(id, task);
+        executer.scheduled_ids.push(id);
     });
 }

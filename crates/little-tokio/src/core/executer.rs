@@ -45,20 +45,16 @@ pub(crate) struct Executer {
     /// Holds the next `Id` value which will be assigned to the next `Task`.
     pub(crate) next_id: TaskId,
     /// Holds the `Task`s to be polled on the Little Tokio runtime.
-    pub(crate) tasks: collections::HashMap<TaskId, Task>,
+    pub(crate) pending_tasks: collections::HashMap<TaskId, Task>,
     /// Holds the identifiers of `Task`s ready to be polled.
     pub(crate) scheduled_ids: Vec<TaskId>,
 }
 
 impl Executer {
-    /// Schedules the `Task` associated with a given `id` to be ready to poll.
-    pub(crate) fn schedule(&mut self, id: TaskId) {
-        self.scheduled_ids.push(id);
-    }
-
     /// Polls the `Task` associated with a given `id`.
+    #[inline]
     pub(crate) fn poll(&mut self, id: TaskId) {
-        let task = self.tasks.remove(&id);
+        let task = self.pending_tasks.remove(&id);
         let Some(mut task) = task else {
             return;
         };
@@ -67,16 +63,16 @@ impl Executer {
             .poll(&mut task::Context::from_waker(&id.into()))
         {
             task::Poll::Pending => {
-                self.tasks.insert(id, task);
+                self.pending_tasks.insert(id, task);
             }
             task::Poll::Ready(()) => {}
         }
     }
 
     /// Returns the current `Status` of a `Executer`.
-    #[inline(always)]
+    #[inline]
     pub(crate) fn status(&self) -> Status {
-        if self.tasks.is_empty() {
+        if self.pending_tasks.is_empty() {
             return Status::Done;
         } else if self.scheduled_ids.is_empty() {
             return Status::WaitingForEvents;

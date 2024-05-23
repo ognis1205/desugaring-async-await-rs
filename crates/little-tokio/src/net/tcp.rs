@@ -114,6 +114,12 @@ impl<'a> future::Future for Accept<'a> {
     }
 }
 
+impl<'a> Drop for Accept<'a> {
+    fn drop(&mut self) {
+        REACTOR.with_borrow_mut(|reactor| reactor.as_mut().unwrap().deregister(&self.delegatee));
+    }
+}
+
 ///
 pub(crate) struct Stream(net::TcpStream);
 

@@ -22,7 +22,7 @@ mod sys;
 
 use crate::core::reactor::Reactor;
 use crate::core::task::{Id as TaskId, Task};
-use std::{cell, collections, fmt, future, mem, task};
+use std::{cell, collections, fmt, future, iter, mem, task};
 
 thread_local! {
     /// Provides the interface to access a `Schedule` thread-local instance. Since the runtime is
@@ -88,16 +88,12 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
     spawn(main_task);
     // Performs the task execution if there are tasks that can be processed. Otherwise, turns the event loop.
     loop {
-        let scheduled_ids = SCHEDULE
-            .with_borrow_mut(|schedule| mem::take(&mut schedule.as_mut().unwrap().scheduled_ids));
-        for id in scheduled_ids {
+        for id in scheduled_ids() {
             poll(id);
         }
         match status() {
             Status::RunningTasks => continue,
-            Status::WaitingForEvents => {
-                REACTOR.with_borrow_mut(|reactor| reactor.as_mut().unwrap().turn())
-            }
+            Status::WaitingForEvents => turn(),
             Status::Done => break,
         }
     }
@@ -119,7 +115,14 @@ pub fn spawn(task: impl future::Future<Output = ()> + 'static) {
     });
 }
 
+/// Returns the scheduled tasks ids to perform further execution.
+#[inline(always)]
+fn scheduled_ids() -> impl iter::IntoIterator<Item = TaskId> {
+    SCHEDULE.with_borrow_mut(|schedule| mem::take(&mut schedule.as_mut().unwrap().scheduled_ids))
+}
+
 /// Polls the `Task` associated with a given `id`.
+#[inline(always)]
 fn poll(id: TaskId) {
     let task =
         SCHEDULE.with_borrow_mut(|schedule| schedule.as_mut().unwrap().pending_tasks.remove(&id));
@@ -140,6 +143,7 @@ fn poll(id: TaskId) {
 }
 
 /// Returns the current `Status` of the Little Tokio runtime.
+#[inline(always)]
 fn status() -> Status {
     SCHEDULE.with_borrow(|schedule| {
         let schedule = schedule.as_ref().unwrap();
@@ -151,4 +155,10 @@ fn status() -> Status {
             return Status::RunningTasks;
         }
     })
+}
+
+/// Performs one iteration of the I/O event loop.
+#[inline(always)]
+fn turn() {
+    REACTOR.with_borrow_mut(|reactor| reactor.as_mut().unwrap().turn())
 }

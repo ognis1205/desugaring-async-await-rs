@@ -69,7 +69,7 @@ pub(crate) struct Schedule {
 }
 
 /// Runs a `Future` to completion on the Little Tokio runtime. This is the runtime’s entry point.
-pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
+pub fn block_on(main: impl future::Future<Output = ()> + 'static) {
     // Instanciates one schedule per thread.
     SCHEDULE.with_borrow_mut(|schedule| {
         if schedule.is_some() {
@@ -85,7 +85,7 @@ pub fn block_on(main_task: impl future::Future<Output = ()> + 'static) {
         *reactor = Some(Reactor::default());
     });
     // Spawns the main task.
-    spawn(main_task);
+    spawn(main);
     // Performs the task execution if there are tasks that can be processed. Otherwise, turns the event loop.
     loop {
         for id in scheduled_ids() {

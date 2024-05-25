@@ -14,5 +14,5 @@
 
 //! This module contains the implementation of UNIX bindings.
 
-#[cfg(any(target_os = "macos"))]
+#[cfg(target_os = "macos")]
 pub(crate) mod kqueue;

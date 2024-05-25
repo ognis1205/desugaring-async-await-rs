@@ -23,13 +23,6 @@ use std::{fmt, os};
 pub(crate) struct Token(i64);
 
 impl Token {
-    /// Returns the copy of the current `Token` and increments the internal `usize` value.
-    pub(crate) fn increment(&mut self) -> Self {
-        let ret = Self(self.0);
-        self.0 += 1;
-        ret
-    }
-
     /// According to the document [kevent(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html),
     /// the `udata` field in `kevent` is an opaque user defined data field which can be utilized by
     /// the user. We use this field for `Token` to identify the event source.

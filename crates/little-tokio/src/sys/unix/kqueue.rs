@@ -77,29 +77,34 @@ pub(crate) struct Event(libc::kevent);
 
 impl Event {
     /// Returns `true` if the `kevent` representing there is data available to read.
+    #[allow(dead_code)]
     pub(crate) fn is_readable(&self) -> bool {
         self.filter == libc::EVFILT_READ || self.filter == libc::EVFILT_USER
     }
 
     /// Returns `true` if the `kevent` representing it is possible to write to the associated file
     /// descriptor.
+    #[allow(dead_code)]
     pub(crate) fn is_writable(&self) -> bool {
         self.filter == libc::EVFILT_WRITE
     }
 
     /// Returns `true` if an error occurs while processing an element of the `changes`.
+    #[allow(dead_code)]
     pub(crate) fn is_error(&self) -> bool {
         (self.flags & libc::EV_ERROR) != 0 || (self.flags & libc::EV_EOF) != 0 && self.fflags != 0
     }
 
     /// Returns `true` if the `kevent` is waiting for a reading event and the associated data is closed
     /// before it reaches to the EOF.
+    #[allow(dead_code)]
     pub(crate) fn is_read_closed(&self) -> bool {
         self.filter == libc::EVFILT_READ && self.flags & libc::EV_EOF != 0
     }
 
     /// Returns `true` if the `kevent` is waiting for a writing event and the associated data is closed
     /// before it reaches to the EOF.
+    #[allow(dead_code)]
     pub(crate) fn is_write_closed(&self) -> bool {
         self.filter == libc::EVFILT_WRITE && self.flags & libc::EV_EOF != 0
     }
@@ -135,6 +140,7 @@ pub(crate) struct Events(Vec<libc::kevent>);
 
 impl Events {
     /// Creates `Events` with a given `capacity`.
+    #[allow(dead_code)]
     pub(crate) fn with_capacity(capacity: usize) -> Events {
         Events(Vec::with_capacity(capacity))
     }

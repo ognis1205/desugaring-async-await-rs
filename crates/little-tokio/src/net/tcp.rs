@@ -116,19 +116,23 @@ impl<'listener> Drop for Accept<'listener> {
     }
 }
 
-///
+/// Represents the Little Tokio wrapper arround a `TcpStream`. This wrapper is essentially equivalent to
+/// `TcpStream`. It implements `Deref` and `DerefMut` to delegate the underlying `TcpStream` methods.
+/// Additionally, this struct is responsible for `register` and/or `deregister` (IO demultiplexing) the
+/// network IO events to the Little Tokio runtime, which is the core part of this crate.
 pub struct Stream {
     delegatee: net::TcpStream,
 }
 
 impl Stream {
-    ///
+    /// Creates a new `Stream` instance from the specified `stream` and sets it non-blocking mode.
     fn new(stream: net::TcpStream) -> io::Result<Self> {
         stream.set_nonblocking(true)?;
         Ok(Self { delegatee: stream })
     }
 
-    ///
+    /// Reads from the incoming connection and returns an `Read` struct, which offers an abstraction over
+    /// IO demultiplexing using the Rust's `Future` runtime, i.e., the Little Tokio runtime.
     pub fn read<'stream, 'buffer>(
         &'stream mut self,
         buffer: &'buffer mut [u8],
@@ -137,6 +141,18 @@ impl Stream {
         'buffer: 'stream,
     {
         Read::new(self, buffer)
+    }
+
+    /// Writes to the outgoing connection and returns an `Write` struct, which offers an abstraction over
+    /// IO demultiplexing using the Rust's `Future` runtime, i.e., the Little Tokio runtime.
+    pub fn write<'stream, 'buffer>(
+        &'stream mut self,
+        buffer: &'buffer [u8],
+    ) -> impl future::Future<Output = WriteOutput> + 'stream
+    where
+        'buffer: 'stream,
+    {
+        Write::new(self, buffer)
     }
 }
 
@@ -154,7 +170,10 @@ impl ops::DerefMut for Stream {
     }
 }
 
-///
+/// Represents the read event of a TCP connection, abstracting the IO demultiplexing of the Little Tokio runtime.
+/// It provides the following two functionalities:
+///  - Registration of the file descriptor to the runtime to monitor readiness for reading from the associated stream.
+///  - Implementation of the `Future` trait for the event loop of the runtime to await read-ready events.
 #[pin_project(PinnedDrop)]
 struct Read<'stream, 'buffer> {
     stream: &'stream mut Stream,
@@ -162,7 +181,7 @@ struct Read<'stream, 'buffer> {
 }
 
 impl<'stream, 'buffer> Read<'stream, 'buffer> {
-    ///
+    /// Creates a new `Read` instance from the specified `stream` and registers it to the runtime.
     fn new(stream: &'stream mut Stream, buffer: &'buffer mut [u8]) -> Self {
         stream
             .delegatee
@@ -209,7 +228,10 @@ impl<'stream, 'buffer> PinnedDrop for Read<'stream, 'buffer> {
     }
 }
 
-///
+/// Represents the write event of a TCP connection, abstracting the IO demultiplexing of the Little Tokio runtime.
+/// It provides the following two functionalities:
+///  - Registration of the file descriptor to the runtime to monitor readiness for writing to the associated stream.
+///  - Implementation of the `Future` trait for the event loop of the runtime to await read-ready events.
 #[pin_project(PinnedDrop)]
 struct Write<'stream, 'buffer> {
     stream: &'stream mut Stream,
@@ -217,7 +239,7 @@ struct Write<'stream, 'buffer> {
 }
 
 impl<'stream, 'buffer> Write<'stream, 'buffer> {
-    ///
+    /// Creates a new `Write` instance from the specified `stream` and registers it to the runtime.
     fn new(stream: &'stream mut Stream, buffer: &'buffer [u8]) -> Self {
         stream
             .delegatee
@@ -235,7 +257,7 @@ impl<'stream, 'buffer> Write<'stream, 'buffer> {
 
 pub type WriteOutput = io::Result<usize>;
 
-impl<'a, 'b> future::Future for Write<'a, 'b> {
+impl<'stream, 'buffer> future::Future for Write<'stream, 'buffer> {
     type Output = WriteOutput;
 
     fn poll(self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {

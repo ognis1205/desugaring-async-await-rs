@@ -28,11 +28,11 @@ thread_local! {
     /// Provides the interface to access a `Schedule` thread-local instance. Since the runtime is
     /// designed solely for single-threaded environments, all access to the schedule needs to occur
     /// via this thread-local instance.
-    pub(crate) static SCHEDULE: cell::RefCell<Option<Schedule>> = cell::RefCell::new(None);
+    pub(crate) static SCHEDULE: cell::RefCell<Option<Schedule>> = const { cell::RefCell::new(None) };
     /// Provides the interface to access a `Reactor` thread-local instance. Since the runtime is
     /// designed solely for single-threaded environments, all access to the runtime needs to occur
     /// via this thread-local instance.
-    pub(crate) static REACTOR: cell::RefCell<Option<Reactor>> = cell::RefCell::new(None);
+    pub(crate) static REACTOR: cell::RefCell<Option<Reactor>> = const { cell::RefCell::new(None) };
 }
 
 /// Represents the current status of a `Schedule` instance.
@@ -148,11 +148,11 @@ fn status() -> Status {
     SCHEDULE.with_borrow(|schedule| {
         let schedule = schedule.as_ref().unwrap();
         if schedule.pending_tasks.is_empty() {
-            return Status::Done;
+            Status::Done
         } else if schedule.scheduled_ids.is_empty() {
-            return Status::WaitingForEvents;
+            Status::WaitingForEvents
         } else {
-            return Status::RunningTasks;
+            Status::RunningTasks
         }
     })
 }

@@ -61,13 +61,13 @@ impl ops::DerefMut for Listener {
 /// It provides the following two functionalities:
 ///  - Registration of the file descriptor to the runtime to monitor readiness for reading from the associated stream.
 ///  - Implementation of the `Future` trait for the event loop of the runtime to await read-ready events.
-pub struct Accept<'a> {
-    listener: &'a mut Listener,
+pub struct Accept<'listener> {
+    listener: &'listener mut Listener,
 }
 
-impl<'a> Accept<'a> {
+impl<'listener> Accept<'listener> {
     /// Creates a new `Accept` instance from the specified `listener` and registers it to the runtime.
-    pub fn new(listener: &'a mut Listener) -> Self {
+    pub fn new(listener: &'listener mut Listener) -> Self {
         listener
             .delegatee
             .set_nonblocking(true)
@@ -84,7 +84,7 @@ impl<'a> Accept<'a> {
 
 pub type AcceptOutput = io::Result<(Stream, net::SocketAddr)>;
 
-impl<'a> future::Future for Accept<'a> {
+impl<'listener> future::Future for Accept<'listener> {
     type Output = AcceptOutput;
 
     fn poll(self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
@@ -104,7 +104,7 @@ impl<'a> future::Future for Accept<'a> {
     }
 }
 
-impl<'a> Drop for Accept<'a> {
+impl<'listener> Drop for Accept<'listener> {
     fn drop(&mut self) {
         REACTOR.with_borrow_mut(|reactor| {
             reactor
@@ -128,14 +128,14 @@ impl Stream {
     }
 
     ///
-    pub fn read<'a, 'b>(
-        &'a mut self,
-        buf: &'b mut [u8],
-    ) -> impl future::Future<Output = ReadOutput> + 'a
+    pub fn read<'stream, 'buffer>(
+        &'stream mut self,
+        buffer: &'buffer mut [u8],
+    ) -> impl future::Future<Output = ReadOutput> + 'stream
     where
-        'b: 'a,
+        'buffer: 'stream,
     {
-        Read::new(self, buf)
+        Read::new(self, buffer)
     }
 }
 
@@ -155,14 +155,14 @@ impl ops::DerefMut for Stream {
 
 ///
 #[pin_project(PinnedDrop)]
-struct Read<'a, 'b> {
-    stream: &'a mut Stream,
-    buffer: &'b mut [u8],
+struct Read<'stream, 'buffer> {
+    stream: &'stream mut Stream,
+    buffer: &'buffer mut [u8],
 }
 
-impl<'a, 'b> Read<'a, 'b> {
+impl<'stream, 'buffer> Read<'stream, 'buffer> {
     ///
-    fn new(stream: &'a mut Stream, buffer: &'b mut [u8]) -> Self {
+    fn new(stream: &'stream mut Stream, buffer: &'buffer mut [u8]) -> Self {
         stream
             .delegatee
             .set_nonblocking(true)
@@ -179,7 +179,7 @@ impl<'a, 'b> Read<'a, 'b> {
 
 pub type ReadOutput = io::Result<usize>;
 
-impl<'a, 'b> future::Future for Read<'a, 'b> {
+impl<'stream, 'buffer> future::Future for Read<'stream, 'buffer> {
     type Output = ReadOutput;
 
     fn poll(self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
@@ -200,7 +200,7 @@ impl<'a, 'b> future::Future for Read<'a, 'b> {
 }
 
 #[pinned_drop]
-impl<'a, 'b> PinnedDrop for Read<'a, 'b> {
+impl<'stream, 'buffer> PinnedDrop for Read<'stream, 'buffer> {
     fn drop(self: pin::Pin<&mut Self>) {
         REACTOR.with_borrow_mut(|reactor| {
             reactor.as_mut().unwrap().deregister(&self.stream.delegatee)

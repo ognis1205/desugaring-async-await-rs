@@ -16,6 +16,8 @@
 
 use crate::core::interest::Interest;
 use crate::REACTOR;
+use pin_project::{pin_project, pinned_drop};
+use std::io::Read as _;
 use std::{future, io, net, ops, pin, task};
 
 /// Represents the Little Tokio wrapper arround a `TcpListener`. This wrapper is essentially equivalent to
@@ -59,11 +61,13 @@ impl ops::DerefMut for Listener {
 /// It provides the following two functionalities:
 ///  - Registration of the file descriptor to the runtime to monitor readiness for reading from the associated stream.
 ///  - Implementation of the `Future` trait for the event loop of the runtime to await read-ready events.
-pub(crate) struct Accept<'a>(&'a mut Listener);
+pub struct Accept<'a> {
+    listener: &'a mut Listener,
+}
 
 impl<'a> Accept<'a> {
     /// Creates a new `Accept` instance from the specified `listener` and registers it to the runtime.
-    pub(crate) fn new(listener: &'a mut Listener) -> Self {
+    pub fn new(listener: &'a mut Listener) -> Self {
         listener
             .delegatee
             .set_nonblocking(true)
@@ -74,38 +78,24 @@ impl<'a> Accept<'a> {
                 .unwrap()
                 .register(&listener.delegatee, Interest::READABLE)
         });
-        Self(listener)
+        Self { listener }
     }
 }
 
-impl ops::Deref for Accept<'_> {
-    type Target = Listener;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl ops::DerefMut for Accept<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-pub(crate) type AcceptOutput = io::Result<(Stream, net::SocketAddr)>;
+pub type AcceptOutput = io::Result<(Stream, net::SocketAddr)>;
 
 impl<'a> future::Future for Accept<'a> {
     type Output = AcceptOutput;
 
     fn poll(self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
-        match self.delegatee.accept() {
+        match self.listener.delegatee.accept() {
             Ok((stream, addr)) => task::Poll::Ready(Ok((Stream::new(stream)?, addr))),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                 REACTOR.with_borrow_mut(|reactor| {
                     reactor
                         .as_mut()
                         .unwrap()
-                        .block(&self.delegatee, cx.waker().clone())
+                        .block(&self.listener.delegatee, cx.waker().clone())
                 });
                 task::Poll::Pending
             }
@@ -116,17 +106,36 @@ impl<'a> future::Future for Accept<'a> {
 
 impl<'a> Drop for Accept<'a> {
     fn drop(&mut self) {
-        REACTOR.with_borrow_mut(|reactor| reactor.as_mut().unwrap().deregister(&self.delegatee));
+        REACTOR.with_borrow_mut(|reactor| {
+            reactor
+                .as_mut()
+                .unwrap()
+                .deregister(&self.listener.delegatee)
+        });
     }
 }
 
 ///
-pub(crate) struct Stream(net::TcpStream);
+pub struct Stream {
+    delegatee: net::TcpStream,
+}
 
 impl Stream {
     ///
-    pub(crate) fn new(stream: net::TcpStream) -> io::Result<Self> {
-        todo!()
+    fn new(stream: net::TcpStream) -> io::Result<Self> {
+        stream.set_nonblocking(true)?;
+        Ok(Self { delegatee: stream })
+    }
+
+    ///
+    pub fn read<'a, 'b>(
+        &'a mut self,
+        buf: &'b mut [u8],
+    ) -> impl future::Future<Output = ReadOutput> + 'a
+    where
+        'b: 'a,
+    {
+        Read::new(self, buf)
     }
 }
 
@@ -134,12 +143,67 @@ impl ops::Deref for Stream {
     type Target = net::TcpStream;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.delegatee
     }
 }
 
 impl ops::DerefMut for Stream {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.delegatee
+    }
+}
+
+///
+#[pin_project(PinnedDrop)]
+struct Read<'a, 'b> {
+    stream: &'a mut Stream,
+    buffer: &'b mut [u8],
+}
+
+impl<'a, 'b> Read<'a, 'b> {
+    ///
+    fn new(stream: &'a mut Stream, buffer: &'b mut [u8]) -> Self {
+        stream
+            .delegatee
+            .set_nonblocking(true)
+            .expect("should set non-blocking properly");
+        REACTOR.with_borrow_mut(|reactor| {
+            reactor
+                .as_mut()
+                .unwrap()
+                .register(&stream.delegatee, Interest::READABLE)
+        });
+        Self { stream, buffer }
+    }
+}
+
+pub type ReadOutput = io::Result<usize>;
+
+impl<'a, 'b> future::Future for Read<'a, 'b> {
+    type Output = ReadOutput;
+
+    fn poll(self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+        let this = self.project();
+        let stream = &mut this.stream.delegatee;
+        let buffer = this.buffer;
+        match stream.read(buffer) {
+            Ok(size) => task::Poll::Ready(Ok(size)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                REACTOR.with_borrow_mut(|reactor| {
+                    reactor.as_mut().unwrap().block(stream, cx.waker().clone())
+                });
+                task::Poll::Pending
+            }
+            Err(e) => task::Poll::Ready(Err(e)),
+        }
+    }
+}
+
+#[pinned_drop]
+impl<'a, 'b> PinnedDrop for Read<'a, 'b> {
+    fn drop(self: pin::Pin<&mut Self>) {
+        REACTOR.with_borrow_mut(|reactor| {
+            reactor.as_mut().unwrap().deregister(&self.stream.delegatee)
+        });
     }
 }

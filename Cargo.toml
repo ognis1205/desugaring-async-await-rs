@@ -15,3 +15,4 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 libc = "0.2.154"
+pin-project = "1.1.5"

@@ -10,3 +10,4 @@ description.workspace = true
 license.workspace = true
 
 [dependencies]
+little-tokio = { path = "../little-tokio" }

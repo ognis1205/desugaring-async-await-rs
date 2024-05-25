@@ -18,6 +18,7 @@ use crate::core::interest::Interest;
 use crate::REACTOR;
 use pin_project::{pin_project, pinned_drop};
 use std::io::Read as _;
+use std::io::Write as _;
 use std::{future, io, net, ops, pin, task};
 
 /// Represents the Little Tokio wrapper arround a `TcpListener`. This wrapper is essentially equivalent to
@@ -67,7 +68,7 @@ pub struct Accept<'listener> {
 
 impl<'listener> Accept<'listener> {
     /// Creates a new `Accept` instance from the specified `listener` and registers it to the runtime.
-    pub fn new(listener: &'listener mut Listener) -> Self {
+    fn new(listener: &'listener mut Listener) -> Self {
         listener
             .delegatee
             .set_nonblocking(true)
@@ -201,6 +202,61 @@ impl<'stream, 'buffer> future::Future for Read<'stream, 'buffer> {
 
 #[pinned_drop]
 impl<'stream, 'buffer> PinnedDrop for Read<'stream, 'buffer> {
+    fn drop(self: pin::Pin<&mut Self>) {
+        REACTOR.with_borrow_mut(|reactor| {
+            reactor.as_mut().unwrap().deregister(&self.stream.delegatee)
+        });
+    }
+}
+
+///
+#[pin_project(PinnedDrop)]
+struct Write<'stream, 'buffer> {
+    stream: &'stream mut Stream,
+    buffer: &'buffer [u8],
+}
+
+impl<'stream, 'buffer> Write<'stream, 'buffer> {
+    ///
+    fn new(stream: &'stream mut Stream, buffer: &'buffer [u8]) -> Self {
+        stream
+            .delegatee
+            .set_nonblocking(true)
+            .expect("should set non-blocking properly");
+        REACTOR.with_borrow_mut(|reactor| {
+            reactor
+                .as_mut()
+                .unwrap()
+                .register(&stream.delegatee, Interest::WRITABLE)
+        });
+        Self { stream, buffer }
+    }
+}
+
+pub type WriteOutput = io::Result<usize>;
+
+impl<'a, 'b> future::Future for Write<'a, 'b> {
+    type Output = WriteOutput;
+
+    fn poll(self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+        let this = self.project();
+        let stream = &mut this.stream.delegatee;
+        let buffer = this.buffer;
+        match stream.write(buffer) {
+            Ok(size) => task::Poll::Ready(Ok(size)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                REACTOR.with_borrow_mut(|reactor| {
+                    reactor.as_mut().unwrap().block(stream, cx.waker().clone())
+                });
+                task::Poll::Pending
+            }
+            Err(e) => task::Poll::Ready(Err(e)),
+        }
+    }
+}
+
+#[pinned_drop]
+impl<'stream, 'buffer> PinnedDrop for Write<'stream, 'buffer> {
     fn drop(self: pin::Pin<&mut Self>) {
         REACTOR.with_borrow_mut(|reactor| {
             reactor.as_mut().unwrap().deregister(&self.stream.delegatee)

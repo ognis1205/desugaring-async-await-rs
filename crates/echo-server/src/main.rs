@@ -15,26 +15,26 @@
 //! This file contains a minimal implementation of a TCP echo server based on the single threaded IO demultiplexer,
 //! i.e., event looping, offered by the Little Tokio async/.await runtime.
 
+use clap::Parser;
 use little_tokio::{
     self,
     net::tcp::{Listener as TcpListener, Stream as TcpStream},
 };
 
+#[derive(Parser, Debug)]
+#[command(version, about, author, long_about = None)]
+struct Cli {
+    #[arg(short = 'p', long, default_value_t = 5000, help = "Port number")]
+    port: u16,
+}
+
 fn main() {
-    little_tokio::block_on(async {
-        let mut listener = TcpListener::bind("0.0.0.0:5000")
-            .expect("should bind a TCP listener to the given IP properly");
-        println!(
-            "server listening on: {}",
-            listener
-                .local_addr()
-                .expect("should acquire IP address properly")
-        );
+    let args = Cli::parse();
+    little_tokio::block_on(async move {
+        let mut listener = TcpListener::bind(format!("0.0.0.0:{}", args.port)).unwrap();
+        println!("server listening on: {}", listener.local_addr().unwrap());
         loop {
-            let (connection, _) = listener
-                .accept()
-                .await
-                .expect("should accept the TCP request properly");
+            let (connection, _) = listener.accept().await.unwrap();
             little_tokio::spawn(handle(connection));
         }
     });
@@ -46,9 +46,6 @@ async fn handle(mut connection: TcpStream) {
         if count == 0 {
             return;
         }
-        connection
-            .write(&buffer[..count])
-            .await
-            .expect("should echo back the request body ");
+        connection.write(&buffer[..count]).await.unwrap();
     }
 }

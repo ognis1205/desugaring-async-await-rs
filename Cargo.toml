@@ -14,5 +14,6 @@ description = "A single thread async runtime for self-studying purpose"
 license = "Apache-2.0"
 
 [workspace.dependencies]
+clap = { version = "4.5.4", features = ["derive"] }
 libc = "0.2.154"
 pin-project = "1.1.5"

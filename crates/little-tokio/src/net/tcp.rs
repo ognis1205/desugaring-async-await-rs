@@ -15,7 +15,7 @@
 //! This module contains the implementation of TCP related network demultiplexing utilities.
 
 use crate::core::interest::Interest;
-use crate::REACTOR;
+use crate::core::reactor::Reactor;
 use pin_project::{pin_project, pinned_drop};
 use std::io::Read as _;
 use std::io::Write as _;
@@ -73,12 +73,7 @@ impl<'listener> Accept<'listener> {
             .delegatee
             .set_nonblocking(true)
             .expect("should make the TCP listener non blocking properly");
-        REACTOR.with_borrow_mut(|reactor| {
-            reactor
-                .as_mut()
-                .unwrap()
-                .register(&listener.delegatee, Interest::READABLE)
-        });
+        Reactor::register(&listener.delegatee, Interest::READABLE);
         Self { listener }
     }
 }
@@ -92,12 +87,7 @@ impl<'listener> future::Future for Accept<'listener> {
         match self.listener.delegatee.accept() {
             Ok((stream, addr)) => task::Poll::Ready(Ok((Stream::new(stream)?, addr))),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                REACTOR.with_borrow_mut(|reactor| {
-                    reactor
-                        .as_mut()
-                        .unwrap()
-                        .block(&self.listener.delegatee, cx.waker().clone())
-                });
+                Reactor::block(&self.listener.delegatee, cx.waker().clone());
                 task::Poll::Pending
             }
             Err(e) => task::Poll::Ready(Err(e)),
@@ -107,12 +97,7 @@ impl<'listener> future::Future for Accept<'listener> {
 
 impl<'listener> Drop for Accept<'listener> {
     fn drop(&mut self) {
-        REACTOR.with_borrow_mut(|reactor| {
-            reactor
-                .as_mut()
-                .unwrap()
-                .deregister(&self.listener.delegatee)
-        });
+        Reactor::deregister(&self.listener.delegatee);
     }
 }
 
@@ -187,12 +172,7 @@ impl<'stream, 'buffer> Read<'stream, 'buffer> {
             .delegatee
             .set_nonblocking(true)
             .expect("should set non-blocking properly");
-        REACTOR.with_borrow_mut(|reactor| {
-            reactor
-                .as_mut()
-                .unwrap()
-                .register(&stream.delegatee, Interest::READABLE)
-        });
+        Reactor::register(&stream.delegatee, Interest::READABLE);
         Self { stream, buffer }
     }
 }
@@ -209,9 +189,7 @@ impl<'stream, 'buffer> future::Future for Read<'stream, 'buffer> {
         match stream.read(buffer) {
             Ok(size) => task::Poll::Ready(Ok(size)),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                REACTOR.with_borrow_mut(|reactor| {
-                    reactor.as_mut().unwrap().block(stream, cx.waker().clone())
-                });
+                Reactor::block(stream, cx.waker().clone());
                 task::Poll::Pending
             }
             Err(e) => task::Poll::Ready(Err(e)),
@@ -222,9 +200,7 @@ impl<'stream, 'buffer> future::Future for Read<'stream, 'buffer> {
 #[pinned_drop]
 impl<'stream, 'buffer> PinnedDrop for Read<'stream, 'buffer> {
     fn drop(self: pin::Pin<&mut Self>) {
-        REACTOR.with_borrow_mut(|reactor| {
-            reactor.as_mut().unwrap().deregister(&self.stream.delegatee)
-        });
+        Reactor::deregister(&self.stream.delegatee);
     }
 }
 
@@ -245,12 +221,7 @@ impl<'stream, 'buffer> Write<'stream, 'buffer> {
             .delegatee
             .set_nonblocking(true)
             .expect("should set non-blocking properly");
-        REACTOR.with_borrow_mut(|reactor| {
-            reactor
-                .as_mut()
-                .unwrap()
-                .register(&stream.delegatee, Interest::WRITABLE)
-        });
+        Reactor::register(&stream.delegatee, Interest::WRITABLE);
         Self { stream, buffer }
     }
 }
@@ -267,9 +238,7 @@ impl<'stream, 'buffer> future::Future for Write<'stream, 'buffer> {
         match stream.write(buffer) {
             Ok(size) => task::Poll::Ready(Ok(size)),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                REACTOR.with_borrow_mut(|reactor| {
-                    reactor.as_mut().unwrap().block(stream, cx.waker().clone())
-                });
+                Reactor::block(stream, cx.waker().clone());
                 task::Poll::Pending
             }
             Err(e) => task::Poll::Ready(Err(e)),
@@ -280,8 +249,6 @@ impl<'stream, 'buffer> future::Future for Write<'stream, 'buffer> {
 #[pinned_drop]
 impl<'stream, 'buffer> PinnedDrop for Write<'stream, 'buffer> {
     fn drop(self: pin::Pin<&mut Self>) {
-        REACTOR.with_borrow_mut(|reactor| {
-            reactor.as_mut().unwrap().deregister(&self.stream.delegatee)
-        });
+        Reactor::deregister(&self.stream.delegatee);
     }
 }

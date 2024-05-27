@@ -63,7 +63,7 @@ macro_rules! new_kevent {
             // The remaining fields are `fflags` and `data`. These filter-specific fields are utilized by the
 	    // kernel and vary depending on the file descriptor types, in other words, these are irrelevant
 	    // to the user land so it is safe to fill out with zeros.
-            ..unsafe { std::mem::zeroed() }
+            ..unsafe { mem::zeroed() }
         }
     };
 }

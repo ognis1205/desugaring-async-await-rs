@@ -11,4 +11,5 @@ license.workspace = true
 
 [dependencies]
 libc.workspace = true
+once_cell.workspace = true
 pin-project.workspace = true

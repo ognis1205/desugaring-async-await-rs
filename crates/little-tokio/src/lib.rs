@@ -29,10 +29,6 @@ thread_local! {
     /// designed solely for single-threaded environments, all access to the schedule needs to occur
     /// via this thread-local instance.
     pub(crate) static SCHEDULE: cell::RefCell<Option<Schedule>> = const { cell::RefCell::new(None) };
-    /// Provides the interface to access a `Reactor` thread-local instance. Since the runtime is
-    /// designed solely for single-threaded environments, all access to the runtime needs to occur
-    /// via this thread-local instance.
-    pub(crate) static REACTOR: cell::RefCell<Option<Reactor>> = const { cell::RefCell::new(None) };
 }
 
 /// Represents the current status of a `Schedule` instance.
@@ -77,13 +73,6 @@ pub fn block_on(main: impl future::Future<Output = ()> + 'static) {
         }
         *schedule = Some(Schedule::default());
     });
-    // Instanciates one reactor per thread.
-    REACTOR.with_borrow_mut(|reactor| {
-        if reactor.is_some() {
-            panic!("can not spawn more than one reactor on the same thread");
-        }
-        *reactor = Some(Reactor::default());
-    });
     // Spawns the main task.
     spawn(main);
     // Performs the task execution if there are tasks that can be processed. Otherwise, turns the event loop.
@@ -93,13 +82,12 @@ pub fn block_on(main: impl future::Future<Output = ()> + 'static) {
         }
         match status() {
             Status::RunningTasks => continue,
-            Status::WaitingForEvents => turn(),
+            Status::WaitingForEvents => Reactor::turn(),
             Status::Done => break,
         }
     }
     // Removes the injected data from the runtime thread.
     SCHEDULE.take();
-    REACTOR.take();
 }
 
 /// Spawns a future onto the Little Tokio runtime.
@@ -155,10 +143,4 @@ fn status() -> Status {
             Status::RunningTasks
         }
     })
-}
-
-/// Performs one iteration of the I/O event loop.
-#[inline(always)]
-fn turn() {
-    REACTOR.with_borrow_mut(|reactor| reactor.as_mut().unwrap().turn())
 }

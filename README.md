@@ -15,12 +15,6 @@ it's intentionally simplified for learning purposes.
 The [echo-server](./crates/echo-server) crate offers the example implementation of an echo server based on
 [little-tokio](./crates/little-tokio) crate.
 
-## ⚠️ Work in Progress⚠️
-
-
-This crate is currently under heavy development. I am aware that some parts of the implementation are not well-designed.
-I will be refactoring those parts to make them cleaner.
-
 ## What You Can Expect to Learn
 
  - [IO MUX/DEMUX](https://en.wikipedia.org/wiki/Multiplexing) ([Reactor Pattern](https://en.wikipedia.org/wiki/Reactor_pattern))

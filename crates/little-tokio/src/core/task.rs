@@ -17,10 +17,10 @@
 
 use crate::core::token::Token;
 use crate::core::waker::VTABLE;
-use std::{fmt, future, pin, task};
+use std::{fmt, future, marker, pin, task};
 
 /// Represents a `Task` of `Runtime` is defined as a heap-allocated and `Pin`ned instance of the `Future`.
-pub(crate) type Task = pin::Pin<Box<dyn future::Future<Output = ()>>>;
+pub(crate) type Task = pin::Pin<Box<dyn future::Future<Output = ()> + marker::Send + 'static>>;
 
 /// Specifies the identifier of a `Task`, which is defined as an `usize` number. In theory, tasks can
 /// have arbitrary data types which will be used for the future usage of a `Future` runtime. However,

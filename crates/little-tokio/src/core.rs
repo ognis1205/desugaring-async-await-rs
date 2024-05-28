@@ -16,6 +16,7 @@
 
 pub(crate) mod interest;
 pub(crate) mod reactor;
+pub(crate) mod scheduler;
 pub(crate) mod task;
 pub(crate) mod token;
 pub(crate) mod waker;

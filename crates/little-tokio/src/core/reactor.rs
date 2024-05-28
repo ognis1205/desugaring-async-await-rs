@@ -26,27 +26,17 @@ use std::{collections, io, os, sync, task};
 /// via this singleton instance.
 struct Singleton;
 
-static INSTANCE: Lazy<sync::RwLock<Reactor>> = Lazy::new(|| sync::RwLock::new(Reactor::default()));
-
 impl Singleton {
-    /// Returns the [`RwLockReadGuard`](https://doc.rust-lang.org/std/sync/struct.RwLockReadGuard.html) of the
+    /// Returns the [`MutexGuard`](https://doc.rust-lang.org/std/sync/struct.MutexGuard.html) of the
     /// `Reactor` singleton instance.
     #[inline(always)]
     #[allow(dead_code)]
-    fn read() -> sync::RwLockReadGuard<'static, Reactor> {
+    fn instance() -> sync::MutexGuard<'static, Reactor> {
+        static INSTANCE: Lazy<sync::Mutex<Reactor>> =
+            Lazy::new(|| sync::Mutex::new(Reactor::default()));
         INSTANCE
-            .read()
-            .expect("`RwLockReadGuard` of the `Reactor` singleton should be locked properly")
-    }
-
-    /// Returns the [`RwLockWriteGuard`](https://doc.rust-lang.org/std/sync/struct.RwLockWriteGuard.html) of the
-    /// `Reactor` singleton instance.
-    #[inline(always)]
-    #[allow(dead_code)]
-    fn write() -> sync::RwLockWriteGuard<'static, Reactor> {
-        INSTANCE
-            .write()
-            .expect("`RwLockWriteGuard` of the `Reactor` singleton should be locked properly")
+            .lock()
+            .expect("`MutexGuard` of the `Reactor` singleton should be locked properly")
     }
 }
 
@@ -68,7 +58,7 @@ impl Reactor {
     /// for recovering, but this is an educational purpose implementation so that conducting over-engineering
     /// was avoided.
     pub(crate) fn turn() {
-        Singleton::write()
+        Singleton::instance()
             .try_turn()
             .expect("should turn the event loop properly")
     }
@@ -84,7 +74,7 @@ impl Reactor {
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
-        Singleton::write()
+        Singleton::instance()
             .try_register(fd, interest)
             .expect("should register the given file descriptor properly")
     }
@@ -99,7 +89,7 @@ impl Reactor {
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
-        Singleton::write()
+        Singleton::instance()
             .try_deregister(fd)
             .expect("should deregister the given file descriptor properly")
     }
@@ -110,7 +100,7 @@ impl Reactor {
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
-        Singleton::write().try_block(fd, waker);
+        Singleton::instance().do_block(fd, waker);
     }
 }
 
@@ -144,8 +134,7 @@ impl Reactor {
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
         self.selector
-            .try_register(fd.as_raw_fd(), fd.as_raw_fd().into(), interest)?;
-        Ok(())
+            .try_register(fd.as_raw_fd(), fd.as_raw_fd().into(), interest)
     }
 
     /// Tries to deregister the given `fd` from the `selector`.
@@ -159,13 +148,12 @@ impl Reactor {
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
         self.blocked_fds.remove(&fd.as_raw_fd().into());
-        self.selector.try_deregister(fd.as_raw_fd())?;
-        Ok(())
+        self.selector.try_deregister(fd.as_raw_fd())
     }
 
     /// Blocks when the given `fd` is not ready to use yet and setup the given `waker` to wake up the corresponding
     /// downstream task to poll later.
-    pub(crate) fn try_block<Fd>(&mut self, fd: &Fd, waker: task::Waker)
+    pub(crate) fn do_block<Fd>(&mut self, fd: &Fd, waker: task::Waker)
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {

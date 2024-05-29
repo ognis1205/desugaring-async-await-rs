@@ -110,7 +110,7 @@ impl Scheduler {
 
 impl Scheduler {
     /// Returns the current `Status` of the Little Tokio runtime.
-    pub(crate) fn get_status(&self) -> Status {
+    fn get_status(&self) -> Status {
         if self.pending_tasks.is_empty() {
             Status::Done
         } else if self.scheduled_ids.is_empty() {
@@ -121,7 +121,7 @@ impl Scheduler {
     }
 
     /// Returns the scheduled tasks ids to perform further execution.
-    pub(crate) fn get_scheduled_ids(&mut self) -> impl iter::IntoIterator<Item = TaskId> {
+    fn get_scheduled_ids(&mut self) -> impl iter::IntoIterator<Item = TaskId> {
         mem::take(&mut self.scheduled_ids)
     }
 

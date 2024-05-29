@@ -110,7 +110,7 @@ impl Reactor {
     /// We should provide a proper error handling here, e.g., implementing a `Turn` structure which is responsible
     /// for recovering, but this is an educational purpose implementation so that conducting over-engineering
     /// was avoided.
-    pub(crate) fn try_turn(&mut self) -> io::Result<()> {
+    fn try_turn(&mut self) -> io::Result<()> {
         let mut events = Events::default();
         self.selector.try_select(&mut events, None)?;
         for event in events.iter() {
@@ -128,7 +128,7 @@ impl Reactor {
     /// We should provide a proper error handling here, e.g., implementing a `Registry` structure which is responsible
     /// for recovering, but this is an educational purpose implementation so that conducting over-engineering
     /// was avoided.
-    pub(crate) fn try_register<Fd>(&mut self, fd: &Fd, interest: Interest) -> io::Result<()>
+    fn try_register<Fd>(&mut self, fd: &Fd, interest: Interest) -> io::Result<()>
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
@@ -142,7 +142,7 @@ impl Reactor {
     /// We should provide a proper error handling here, e.g., implementing a `Registry` structure which is responsible
     /// for recovering, but this is an educational purpose implementation so that conducting over-engineering
     /// was avoided.
-    pub(crate) fn try_deregister<Fd>(&mut self, fd: &Fd) -> io::Result<()>
+    fn try_deregister<Fd>(&mut self, fd: &Fd) -> io::Result<()>
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {
@@ -152,7 +152,7 @@ impl Reactor {
 
     /// Blocks when the given `fd` is not ready to use yet and setup the given `waker` to wake up the corresponding
     /// downstream task to poll later.
-    pub(crate) fn do_block<Fd>(&mut self, fd: &Fd, waker: task::Waker)
+    fn do_block<Fd>(&mut self, fd: &Fd, waker: task::Waker)
     where
         Fd: os::fd::AsFd + os::fd::AsRawFd,
     {

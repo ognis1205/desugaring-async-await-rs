@@ -30,7 +30,6 @@ impl Singleton {
     /// Returns the [`MutexGuard`](https://doc.rust-lang.org/std/sync/struct.MutexGuard.html) of the
     /// `Reactor` singleton instance.
     #[inline(always)]
-    #[allow(dead_code)]
     fn instance() -> sync::MutexGuard<'static, Reactor> {
         static INSTANCE: Lazy<sync::Mutex<Reactor>> =
             Lazy::new(|| sync::Mutex::new(Reactor::default()));

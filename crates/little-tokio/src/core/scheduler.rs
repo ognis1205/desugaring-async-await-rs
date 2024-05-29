@@ -27,7 +27,6 @@ impl Singleton {
     /// Returns the [`MutexGuard`](https://doc.rust-lang.org/std/sync/struct.MutexGuard.html) of the
     /// `Scheduler` singleton instance.
     #[inline(always)]
-    #[allow(dead_code)]
     fn instance() -> sync::MutexGuard<'static, Scheduler> {
         static INSTANCE: Lazy<sync::Mutex<Scheduler>> =
             Lazy::new(|| sync::Mutex::new(Scheduler::default()));
@@ -102,7 +101,7 @@ impl Scheduler {
             .poll(&mut task::Context::from_waker(&id.into()))
         {
             task::Poll::Pending => {
-                Singleton::instance().do_reschedule(id, task);
+                Singleton::instance().do_pend(id, task);
             }
             task::Poll::Ready(()) => {}
         }
@@ -138,8 +137,8 @@ impl Scheduler {
         self.scheduled_ids.push(id);
     }
 
-    /// Reschedules the `task` associated with the given `id` to the scheduler.
-    fn do_reschedule(&mut self, id: TaskId, task: Task) {
+    /// Pends the `task` associated with the given `id` to the scheduler.
+    fn do_pend(&mut self, id: TaskId, task: Task) {
         self.pending_tasks.insert(id, task);
     }
 

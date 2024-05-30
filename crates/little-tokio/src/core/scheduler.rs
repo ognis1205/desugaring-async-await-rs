@@ -92,7 +92,7 @@ impl Scheduler {
 
     /// Polls the `Task` associated with a given `id`.
     pub(crate) fn poll(id: TaskId) {
-        let task = Singleton::instance().get_next_task(&id);
+        let task = Singleton::instance().get_task(&id);
         let Some(mut task) = task else {
             return;
         };
@@ -126,7 +126,7 @@ impl Scheduler {
     }
 
     /// Returns the next scheduled `Task` to perform further execution.
-    fn get_next_task(&mut self, id: &TaskId) -> Option<Task> {
+    fn get_task(&mut self, id: &TaskId) -> Option<Task> {
         self.pending_tasks.remove(id)
     }
 

@@ -19,6 +19,7 @@
 mod core;
 pub mod net;
 mod sys;
+pub mod utils;
 
 use crate::core::reactor::Reactor;
 use crate::core::scheduler::{Scheduler, Status};

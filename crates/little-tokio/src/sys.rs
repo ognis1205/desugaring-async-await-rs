@@ -17,7 +17,7 @@
 // Wraps a given system call so that it returns Rust's `Result`.
 #[allow(unused_macros)]
 macro_rules! syscall {
-    ($fn: ident ( $($arg: expr),* $(,)* ) ) => {{
+    ($fn: ident ( $($arg: expr),* $(,)? ) ) => {{
         let ret = unsafe { libc::$fn($($arg, )*) };
         if ret < 0 {
             Err(std::io::Error::last_os_error())

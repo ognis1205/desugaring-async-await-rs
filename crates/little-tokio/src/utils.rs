@@ -12,4 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//!
+//! This module contains utility combinators of `Future`.
+
+// Bakes in propagation of `Pending` signals by returning early.
+#[allow(unused_macros)]
+macro_rules! ready {
+    ($poll: expr $(,)?) => {
+        match $poll {
+            std::task::Poll::Ready(output) => output,
+            std::task::Poll::Pending => return std::task::Poll::Pending,
+        }
+    };
+}

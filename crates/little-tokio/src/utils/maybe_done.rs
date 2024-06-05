@@ -22,7 +22,7 @@ pub enum MaybeDone<F>
 where
     F: future::Future,
 {
-    Future(F),
+    Future(/* pinned */ F),
     Done(F::Output),
     Gone,
 }
@@ -35,7 +35,9 @@ where
 {
     type Output = ();
 
+    //    fn poll(mut self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
     fn poll(mut self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+        // Safety:
         unsafe {
             match self.as_mut().get_unchecked_mut() {
                 Self::Future(f) => {

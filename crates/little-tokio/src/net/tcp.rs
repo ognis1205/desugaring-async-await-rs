@@ -232,13 +232,17 @@ impl<'stream, 'buffer> future::Future for Write<'stream, 'buffer> {
     type Output = WriteOutput;
 
     fn poll(self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+        //    fn poll(mut self: pin::Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
         let this = self.project();
         let stream = &mut this.stream.delegatee;
         let buffer = this.buffer;
+        //        let this = &mut *self;
         match stream.write(buffer) {
+            //        match this.stream.delegatee.write(this.buffer) {
             Ok(size) => task::Poll::Ready(Ok(size)),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                 Reactor::block(stream, cx.waker().clone());
+                //                Reactor::block(&this.stream.delegatee, cx.waker().clone());
                 task::Poll::Pending
             }
             Err(e) => task::Poll::Ready(Err(e)),
